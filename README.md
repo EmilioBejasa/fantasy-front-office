@@ -165,7 +165,8 @@ The page is laid out like a website, themed as an **executive front office**
 
 Every player in the database for a given week, ranked highest to lowest by
 that week's actual PPR fantasy points, or as a full Week 1-18 season grid
-with a running total/average. The position filter defaults to **RB**, and
+with a running total/average, sorted by either one (**Sort**, or the TTL and
+AVG headers). The position filter defaults to **RB**, and
 its buttons are ordered RB, WR, QB, TE, ALL — skill positions people are
 actually checking waivers/streamers for first, the unfiltered view last.
 Each week's by-week view also shows that week's real bye teams (the full
@@ -652,7 +653,8 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   `/v1/stats/nba/regular/<season>/<week>` feed only returns each player's
   last game of the week, so it isn't used. A finished season has 25 weeks.
   A new week opens Monday before its first game, so until then the page
-  opens on last week. A **Top scorers** view (`NbaTopScorers`) ranks the
+  opens on last week. **Sort** switches between the week's total and its
+  average per game (the FPG and Total headers do the same). A **Top scorers** view (`NbaTopScorers`) ranks the
   season's top 50 by total fantasy points, sortable by FPG or real points
   per game (those two need the Big Board's minimum games). On phones the
   Pos, Games, GP and FPG columns fold into a line under each name, so the

@@ -6904,8 +6904,6 @@ function NbaScoreboard({ data, settings, setSettings }) {
       {day(g.date).split(",")[0]} <strong style={{ color: "var(--text-primary)" }}>{fmt1(g.fp)}</strong>
     </span>
   ));
-  const first = rows.flatMap((r) => r.games.map((g) => g.date)).sort()[0];
-  const last = rows.flatMap((r) => r.games.map((g) => g.date)).sort().pop();
 
   return (
     <div className="flex flex-col gap-5">
@@ -6935,7 +6933,7 @@ function NbaScoreboard({ data, settings, setSettings }) {
       </div>
       {view === "week" && (
         <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-          <LabeledControl label={`Week${first ? ` · ${day(first)} – ${day(last)}` : ""}`}>
+          <LabeledControl label="Week">
             <PillGroup options={Array.from({ length: weeks }, (_, i) => ({ key: i + 1, label: `Wk ${i + 1}` }))} value={week} onChange={setWeek} scroll />
           </LabeledControl>
           <LabeledControl label="Sort">

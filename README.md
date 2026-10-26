@@ -41,10 +41,11 @@ To run it locally instead: no build step, no install. Just open `index.html` in 
 or drag it into a browser window). It loads React and Babel from a CDN and
 transforms the JSX in-browser.
 
-The whole basketball side, and the live parts of Waiver Wire Targets (the "Trending on Sleeper" panel), need
-the page served over http(s) with network access — they won't work from a
-plain double-clicked file, since `fetch` calls from a `file://` page hit
-browser restrictions that a real server doesn't. Any static file server
+The live data (the basketball side, and the "Trending on Sleeper" panel on
+Waiver Wire Targets) needs the page served over http(s) with network
+access, since `fetch` calls from a `file://` page hit browser restrictions
+that a real server doesn't. From a double-clicked file the basketball pages
+fall back to the daily snapshot in `data/nba-snapshot.js` instead. Any static file server
 works, e.g. `python -m http.server` from this directory, then open
 `http://localhost:8000/index.html`. Everything else in the app (Weekly
 Scores, the hand-picked Waiver Wire list, Injured Reserve) works fine from a
@@ -558,13 +559,24 @@ with no league size, scoring or TE-premium options; FantasyCalc's generic
 Season-long (redraft) **points leagues** only. No dynasty, no category
 leagues. Everything is live from Sleeper's public NBA API
 (`scripts/lib/sleeper-nba.js`, loaded with a plain `<script>` tag as
-`window.SleeperNBA`). There's no baked snapshot, so these pages need the
-site served over http(s). The data loads the first time a basketball page
+`window.SleeperNBA`). The data loads the first time a basketball page
 opens and is cached in `localStorage` (`ff-valuediff:nba-v1:*`):
 - the NBA state (10 minutes)
 - this season's totals (1 hour) and last season's (1 day)
 - the trimmed player list with injuries (6 hours)
 - each fantasy week (1 day, or 10 minutes for the current week)
+
+**Snapshot.** If a request to Sleeper fails (Sleeper is down, no network,
+or a double-clicked `file://` page), the pages fall back to
+`data/nba-snapshot.js` and show a "saved snapshot" banner. The page loads
+that file only on the first failure, so football visitors never download
+it. It holds the NBA state, both seasons' totals, the player list and this
+season's last 3 fantasy weeks. Every week would grow to ~4MB by April, and
+older weeks still load live. To refresh it, run `node scripts/refresh-nba.js`
+(`--dry-run` to preview). A GitHub Action
+(`.github/workflows/refresh-nba.yml`) runs it daily at 11:00 UTC, after
+the late West Coast games, and commits the file when the data changed. It
+can be run by hand from the Actions tab too.
 
 **Seasons.** Sleeper names a season by the year it starts ("2025" is
 2025-26). Until the current season has games (2026-27 tips off Oct 20,
@@ -591,6 +603,10 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   minutes, because sat-out games come through with empty stats. The older
   `/v1/stats/nba/regular/<season>/<week>` feed only returns each player's
   last game of the week, so it isn't used. A finished season has 25 weeks.
+  A new week opens Monday before its first game, so until then the page
+  opens on last week. A **Top scorers** view (`NbaTopScorers`) ranks the
+  season's top 50 by total fantasy points, sortable by FPG or real points
+  per game (those two need the Big Board's minimum games).
 - **Waiver Desk** (`NbaWaivers`): Sleeper's live trending adds and drops,
   with each player's points per game. Once the current season has two
   weeks, a **Heating up** list appears. It shows players whose last two

@@ -1,0 +1,45 @@
+# Re-writes data/nba-snapshot.js (NBA season totals, players and recent weeks)
+# from Sleeper and commits it if anything changed. The basketball pages still
+# pull live from Sleeper; this keeps their fallback current.
+name: Refresh NBA
+
+on:
+  schedule:
+    # 11:00 UTC daily (~7am ET), after every night's games (West Coast games
+    # end around 2am ET) and Sleeper's stat corrections.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shares a group with the other refresh jobs so they never push over each other.
+concurrency:
+  group: refresh-index-html
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Refresh NBA snapshot from Sleeper
+        run: node scripts/refresh-nba.js
+
+      - name: Commit if changed
+        run: |
+          git add data/nba-snapshot.js
+          if git diff --cached --quiet; then
+            echo "No NBA changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh NBA data from Sleeper ($(date -u +%Y-%m-%d))"
+          git pull --rebase
+          git push

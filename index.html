@@ -214,9 +214,12 @@
     -webkit-background-clip: text; background-clip: text; color: transparent; }
 
   /* Shared pill button: filters, toggles, settings. Selected state comes from
-     aria-pressed; the color from --pill-accent (blue unless a position or
-     side color is passed). */
-  .pill { --pill-accent: var(--series-blue); border: 1px solid var(--border); background: var(--surface-1);
+     aria-pressed; the color from --pill-accent (the page's color unless a
+     trade-side color is passed). */
+  /* A page's controls fill with its color, darkened a little so white labels
+     stay readable on the lighter hues (yellow, pink). */
+  main { --page-accent: color-mix(in srgb, var(--page-hue, var(--sport)) 85%, #000); }
+  .pill { --pill-accent: var(--page-accent, var(--sport)); border: 1px solid var(--border); background: var(--surface-1);
     color: var(--text-secondary); cursor: pointer; user-select: none;
     transition: background-color .15s, border-color .15s, color .15s, transform .1s, box-shadow .15s; }
   .pill:hover { border-color: var(--pill-accent); color: var(--text-primary);
@@ -2937,7 +2940,7 @@ const POS_PILL_COLOR = {
   G: "var(--hue-blue)", F: "var(--hue-aqua)",
 };
 const posPillColor = (pos) => POS_PILL_COLOR[pos] || "var(--series-blue)";
-const POSITION_OPTIONS = POSITIONS.map((p) => ({ key: p, label: p, color: posPillColor(p) }));
+const POSITION_OPTIONS = POSITIONS.map((p) => ({ key: p, label: p }));
 
 function PosBadge({ pos, rank }) {
   return (
@@ -3572,11 +3575,13 @@ function DynastyStatusLine({ data }) {
 
 // Segmented control: one rounded track per group of options, with a
 // highlight that slides to the selected option (measured from the DOM, so it
-// also works when a long group like the week list wraps). Options can carry
-// their own `color` (positions); otherwise the group's `accent` is used.
-// `scroll` keeps a long row (week pickers) on one line that scrolls sideways
-// instead of wrapping, with the selected option scrolled into view.
-function PillGroup({ options, value, onChange, accent = "var(--series-blue)", scroll = false }) {
+// also works when a long group like the week list wraps). Every group fills
+// with its page's color (--page-accent), so a page's controls all match; only
+// the Football | Basketball switches pass `sportColors` to use each option's
+// own color. `scroll` keeps a long row (week pickers) on one line that scrolls
+// sideways instead of wrapping, with the selected option scrolled into view.
+function PillGroup({ options, value, onChange, scroll = false, sportColors = false }) {
+  const fill = (o) => (sportColors && o?.color) || "var(--page-accent, var(--sport))";
   const trackRef = useRef(null);
   const [indicator, setIndicator] = useState(null);
   const activeIndex = options.findIndex((o) => o.key === value);
@@ -3605,12 +3610,12 @@ function PillGroup({ options, value, onChange, accent = "var(--series-blue)", sc
         <span className="seg-indicator" aria-hidden="true"
           style={{
             transform: `translate(${indicator.left}px, ${indicator.top}px)`, width: indicator.width, height: indicator.height,
-            "--pill-accent": options[activeIndex]?.color || accent,
+            "--pill-accent": fill(options[activeIndex]),
           }} />
       )}
       {options.map((o) => (
         <button key={o.key} type="button" onClick={() => onChange(o.key)} className="seg" aria-pressed={value === o.key}
-          style={{ "--pill-accent": o.color || accent }}>
+          style={{ "--pill-accent": fill(o) }}>
           {o.label}
         </button>
       ))}
@@ -3636,7 +3641,7 @@ function LeagueSettings({ settings, setSettings, fields = ["mode", "qb", "teams"
       {fields.map((f) => (
         <div key={f} className="flex flex-col gap-1">
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>{SETTING_LABELS[f]}</span>
-          <PillGroup options={SETTING_OPTIONS[f]} value={settings[f]} accent="var(--hue-violet)"
+          <PillGroup options={SETTING_OPTIONS[f]} value={settings[f]}
             onChange={(v) => setSettings((s) => ({ ...s, [f]: v }))} />
         </div>
       ))}
@@ -3661,7 +3666,7 @@ function dynastyWindow(r) {
 }
 const WINDOW_COLOR = { "Win-now": "var(--hue-orange)", Future: "var(--hue-violet)" };
 
-const DYNASTY_POSITIONS = [...POSITIONS.map((p) => ({ key: p, label: p, color: posPillColor(p) })), { key: "PICK", label: "Picks", color: posPillColor("PICK") }];
+const DYNASTY_POSITIONS = [...POSITIONS.map((p) => ({ key: p, label: p })), { key: "PICK", label: "Picks" }];
 const DYNASTY_SORTS = { value: (a, b) => b.value - a.value, age: (a, b) => (a.age ?? 99) - (b.age ?? 99), trend: (a, b) => b.trend30 - a.trend30 };
 
 function DynastyValues({ data, settings, setSettings }) {
@@ -3866,8 +3871,8 @@ function BoardGrid({ sport, players, teams, roundChoices, defaultRounds, highlig
 // league settings, so it updates whenever they do. Dynasty boards can mix in
 // rookie picks (on by default, with a toggle to leave them off). Dynasty
 // startups run deep, so dynasty boards go to 30 rounds.
-const BOARD_HIGHLIGHT_OPTIONS = ["ALL", "QB", "RB", "WR", "TE"].map((p) => ({ key: p, label: p, color: posPillColor(p) }));
-const BOARD_PICK_HIGHLIGHT = { key: "PICK", label: "Picks", color: posPillColor("PICK") };
+const BOARD_HIGHLIGHT_OPTIONS = ["ALL", "QB", "RB", "WR", "TE"].map((p) => ({ key: p, label: p }));
+const BOARD_PICK_HIGHLIGHT = { key: "PICK", label: "Picks" };
 const BOARD_PICKS_OPTIONS = [{ key: "on", label: "On" }, { key: "off", label: "Off" }];
 
 // The picks a startup would draft: Early/Mid/Late picks where FantasyCalc
@@ -5127,7 +5132,7 @@ function ProjectedStandings({ proj, raw, teams, myTeam, team, onView }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         {weeks.length > 0 && (
           <PillGroup options={[{ key: "projected", label: "End of season" }, { key: "current", label: "Today" }]}
-            value={view} onChange={setView} accent="var(--sport)" />
+            value={view} onChange={setView} />
         )}
         {playoffTeams > 0 && (
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>Top {playoffTeams} make the playoffs</span>
@@ -6036,8 +6041,8 @@ function MyLeagues({ settings, setSettings, navigate }) {
                             {s.benched.length > 0 && <>Moves {s.benched.map((a) => a.name).join(" and ")} to the bench. </>}
                             {s.result.verdict === "slight" ? "Slight overpay." : "Fair value."}
                           </p>
-                          <button type="button" onClick={() => openTrade(s)} className="pill self-start text-xs rounded-full px-3 py-1 font-medium"
-                            style={{ "--pill-accent": "var(--hue-orange)" }}>Open in Trade Desk →</button>
+                          <button type="button" onClick={() => openTrade(s)} className="pill self-start text-xs rounded-full px-3 py-1 font-medium">
+                            Open in Trade Desk →</button>
                         </li>
                       );
                     })}
@@ -6405,7 +6410,7 @@ function TradeCalculator({ data, settings, setSettings }) {
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
             className="pill text-xs rounded-full px-3 py-1 font-medium" aria-pressed={settings.raw}
             title="Compare plain sums of values, with no stud adjustment or roster spot credit"
-            style={{ "--pill-accent": "var(--hue-violet)" }}>Raw values</button>
+>Raw values</button>
           {(sides[0].length > 0 || sides[1].length > 0) && (
             <button type="button" onClick={() => setSides([[], []])} className="pill text-xs rounded-full px-3 py-1 font-medium"
               style={{ "--pill-accent": "var(--series-red)" }}>Clear trade</button>
@@ -6487,7 +6492,7 @@ function pickSlotForRank(rank) {
   const third = Math.ceil(((rank - 1) % CLASS_LEAGUE_SIZE + 1) / (CLASS_LEAGUE_SIZE / 3));
   return { round, slot: ["early", "mid", "late"][third - 1] };
 }
-const CLASS_POSITIONS = [{ key: "ALL", label: "ALL" }, ...["RB", "WR", "QB", "TE"].map((p) => ({ key: p, label: p, color: posPillColor(p) }))];
+const CLASS_POSITIONS = [{ key: "ALL", label: "ALL" }, ...["RB", "WR", "QB", "TE"].map((p) => ({ key: p, label: p }))];
 
 function DynastyClass2027({ data, settings, setSettings }) {
   const format = settings.qb;
@@ -6804,7 +6809,7 @@ const nbaFpg = (p, scoring) => (p && p.gp ? nbaPoints(p.stats, scoring) / p.gp :
 const fmt1 = (n) => (n == null || Number.isNaN(n) ? "–" : n.toFixed(1));
 
 const NBA_POSITIONS = ["PG", "SG", "SF", "PF", "C"];
-const NBA_POSITION_OPTIONS = [{ key: "ALL", label: "ALL" }, ...NBA_POSITIONS.map((p) => ({ key: p, label: p, color: posPillColor(p) }))];
+const NBA_POSITION_OPTIONS = [{ key: "ALL", label: "ALL" }, ...NBA_POSITIONS.map((p) => ({ key: p, label: p }))];
 const nbaPosMatch = (p, pos) => pos === "ALL" || p.position === pos || (p.positions || []).includes(pos);
 
 // Shown on every basketball page until the data arrives (or if it can't).
@@ -6914,7 +6919,7 @@ function NbaScoreboard({ data, settings, setSettings }) {
           <PillGroup options={seasons.map((s) => ({ key: s, label: nbaSeasonLabel(s) }))} value={season} onChange={(s) => { setSeason(s); setWeek(null); }} />
         </LabeledControl>
         <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring} accent="var(--hue-violet)"
+          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
             onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
         </LabeledControl>
         <LabeledControl label="Position">
@@ -7101,7 +7106,7 @@ function NbaRankings({ data, settings, setSettings }) {
           <PillGroup options={seasons.map((s) => ({ key: s, label: nbaSeasonLabel(s) }))} value={season} onChange={setSeason} />
         </LabeledControl>
         <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring} accent="var(--hue-violet)"
+          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
             onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
         </LabeledControl>
         <LabeledControl label="Position">
@@ -7457,11 +7462,11 @@ function NbaTrade({ data, settings, setSettings }) {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
           <LabeledControl label="Scoring">
-            <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring} accent="var(--hue-violet)"
+            <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
               onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
           </LabeledControl>
           <LabeledControl label="Teams">
-            <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams} accent="var(--hue-violet)"
+            <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
               onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
           </LabeledControl>
         </div>
@@ -7469,7 +7474,7 @@ function NbaTrade({ data, settings, setSettings }) {
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
             className="pill text-xs rounded-full px-3 py-1 font-medium" aria-pressed={settings.raw}
             title="Compare plain sums, with no stud adjustment or roster spot credit"
-            style={{ "--pill-accent": "var(--hue-violet)" }}>Raw values</button>
+>Raw values</button>
           {(sides[0].length > 0 || sides[1].length > 0) && (
             <button type="button" onClick={() => setSides([[], []])} className="pill text-xs rounded-full px-3 py-1 font-medium"
               style={{ "--pill-accent": "var(--series-red)" }}>Clear trade</button>
@@ -7571,7 +7576,7 @@ function NbaProjections({ data, settings, setSettings }) {
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
         <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring} accent="var(--hue-violet)"
+          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
             onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
         </LabeledControl>
         <LabeledControl label="Position">
@@ -7671,11 +7676,11 @@ function NbaDraftBoard({ data, settings, setSettings }) {
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-2">
         <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring} accent="var(--hue-violet)"
+          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
             onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
         </LabeledControl>
         <LabeledControl label="Teams">
-          <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams} accent="var(--hue-violet)"
+          <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
             onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
         </LabeledControl>
       </div>
@@ -8248,7 +8253,7 @@ function ValueHistory({ id, fcId, settings }) {
             );
           })}
         </ul>
-        <PillGroup options={VALUE_RANGES} value={range} onChange={setRange} accent="var(--hue-violet)" />
+        <PillGroup options={VALUE_RANGES} value={range} onChange={setRange} />
       </div>
 
       <div ref={wrapRef} className="w-full">
@@ -8849,7 +8854,7 @@ function SportSwitch({ sport, page, navigate, setSport }) {
     const match = sportPages(to).find((p) => p.short === here.short) || sportPages(to)[0];
     navigate(match.key);
   };
-  return <PillGroup options={SPORTS.map((s) => ({ key: s.key, label: s.label, color: s.color }))} value={sport} onChange={change} accent={SPORTS.find((s) => s.key === sport).color} />;
+  return <PillGroup options={SPORTS.map((s) => ({ key: s.key, label: s.label, color: s.color }))} value={sport} onChange={change} sportColors />;
 }
 
 function NavLink({ p, page, navigate, className = "" }) {
@@ -9011,7 +9016,7 @@ function PlayerSearch({ sport, dynasty, sleeperPlayers, nba, onNeedNba, onClose 
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKeyDown}
             placeholder={`Search ${scope === "nba" ? "basketball" : "football"} players`} aria-label="Player name"
             className="flex-1 min-w-0 bg-transparent outline-none text-base" style={{ color: "var(--text-primary)" }} />
-          <PillGroup options={SPORTS.map((s) => ({ key: s.key, label: s.key.toUpperCase(), color: s.color }))} value={scope} onChange={setScope} />
+          <PillGroup options={SPORTS.map((s) => ({ key: s.key, label: s.key.toUpperCase(), color: s.color }))} value={scope} onChange={setScope} sportColors />
         </div>
         <ul className="max-h-[60vh] overflow-y-auto p-1.5" role="listbox">
           {results.map((p, i) => (
@@ -9298,7 +9303,8 @@ function App() {
     <div className="has-tab-bar min-h-screen flex flex-col">
       <SiteHeader page={page} navigate={navigate} sport={sport} setSport={setSport} theme={theme} toggleTheme={toggleTheme}
         onSearch={() => setSearchOpen(true)} />
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 flex flex-col gap-2">
+      {/* Each page's own color (its folder and nav color) fills its controls. */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 flex flex-col gap-2" style={{ "--page-hue": PAGE_STYLE[page]?.hue }}>
         {current.group && (
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: PAGE_STYLE[page].hue }}>
             {current.short} <span style={{ color: "var(--text-muted)" }}>· {SPORT_LABEL[current.sport]} · {current.group}</span>

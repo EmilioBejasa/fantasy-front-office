@@ -138,15 +138,19 @@ The page is laid out like a website, themed as an **executive front office**
   FantasyCalc, DraftSharks, Yahoo Sports).
 - **Color:** each tool keeps its own color and icon (`PAGE_STYLE`), used on
   its folder, its nav underline and the label above its title.
-  - Position filters and the `PosBadge` chips in tables use position colors
-    (QB blue, RB orange, WR green, TE gold, picks pink, `POS_PILL_COLOR`).
-  - League settings are violet. Trade sides are blue (A) and orange (B).
+  - **Controls match their page:** every filter, setting and toggle on a page
+    fills with that page's color (`--page-hue` on `<main>`, darkened a little
+    as `--page-accent` so white labels stay readable), so no lone switch
+    stands out. Only the Football | Basketball switches use the sport colors.
+  - The `PosBadge` chips in tables use position colors (QB blue, RB orange,
+    WR green, TE gold, picks pink, `POS_PILL_COLOR`). Trade sides are blue (A)
+    and orange (B).
   - Value trends are green up and red down.
 - **Favicon:** `favicon.svg`, a navy plaque with a brass "F" monogram.
 - **Segmented controls:** each group of filter or setting options (format,
   QB, teams, scoring, TE premium, positions, weeks, views, adds/drops) is one
   rounded track. The highlight slides to the selected option (`PillGroup`,
-  `.segmented` / `.seg`). Position options use position colors.
+  `.segmented` / `.seg`), in the page's color.
 - **Less boxy pages:** the longer "where this data comes from" notes under
   each page title sit behind an **About this data** toggle (`AboutData`).
   The Sleeper league instructions stay visible. Panels have rounder corners,

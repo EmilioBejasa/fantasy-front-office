@@ -1,0 +1,55 @@
+# Builds the site (scripts/build.js: JSX compiled ahead of time, Tailwind
+# prebuilt) and deploys it to GitHub Pages. Runs on every push to master, and
+# after each data-refresh job, since a push made by a workflow's own token
+# doesn't start other workflows.
+name: Deploy site
+
+on:
+  push:
+    branches: [master]
+  workflow_run:
+    workflows: [Refresh scores, Refresh NBA, Refresh players, Refresh market values, Refresh dynasty values]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer one replaces a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # After a refresh job, only if it succeeded (it may have pushed new data).
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Always the latest master, including data a refresh job just pushed.
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build
+        run: |
+          npm install --no-save --no-package-lock esbuild@0.24.0 tailwindcss@3.4.17
+          node scripts/build.js
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

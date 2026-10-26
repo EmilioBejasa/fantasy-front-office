@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Rewrites data/nba-snapshot.js from Sleeper: the NBA state, season totals for
-// this season and last, the trimmed player list, and this season's last few
-// fantasy weeks (every week would grow to ~4MB by April; older weeks are
-// still there live).
+// this season and last, the schedule, the trimmed player list, and this
+// season's last few fantasy weeks (every week would grow to ~4MB by April;
+// older weeks are still there live).
 //
 // Usage: node scripts/refresh-nba.js [--dry-run]
 //
@@ -31,6 +31,7 @@ async function main() {
     data[`season-${s}`] = await N.fetchSeason(s);
     console.log(`Season ${s}: ${data[`season-${s}`].length} players`);
   }
+  data[`schedule-${state.season}`] = await N.fetchSchedule(state.season);
   data.players = await N.fetchPlayers();
   console.log(`${Object.keys(data.players).length} active players`);
 

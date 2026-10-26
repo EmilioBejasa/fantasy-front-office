@@ -32,21 +32,30 @@
   const roundPts = (pts) => Math.round((pts || 0) * 10) / 10;
 
   // rows: the raw stats array for one week. players: samplePlayers.
-  // Returns { scores: {id: pts}, dnp: [id], teamsPlayed: [team], extras } —
+  // Returns { scores: {id: pts}, dnp: [id], teamsPlayed: [team], extras, details, allowed } —
   // scores for anyone who took a snap, DNP for anyone whose team has played
   // but who didn't. Players whose team hasn't played yet (bye, or a game later
   // in the week) are in neither, so they stay blank instead of being guessed
   // at. `extras` is every other QB/RB/WR/TE who played, keyed by Sleeper id
   // ({name, team, position, pts}), so rankings aren't limited to `players`
-  // (see mergeExtras).
+  // (see mergeExtras). `details` is each scorer's usage, keyed the same way the
+  // scores end up ({opp, snap: % of team offensive snaps, tgt, car}); the page
+  // shows it next to the points, the refresh script ignores it. `allowed` is
+  // the PPR points each defense gave up to each position ({DEF: {WR: pts}}),
+  // for the Film Room's matchup tags.
   function summarizeWeek(rows, players) {
     const byId = new Map();
     const byName = new Map();
     const teamsPlayed = new Set();
+    const allowed = {};
     for (const r of rows) {
       if (!r || !r.player) continue;
       byId.set(r.player_id, r);
       if (r.stats && r.stats.gp > 0) teamsPlayed.add(normalizeTeam(r.team));
+      if (r.stats && r.stats.gp > 0 && r.opponent && SKILL_POSITIONS.includes(r.player.position)) {
+        const d = allowed[normalizeTeam(r.opponent)] || (allowed[normalizeTeam(r.opponent)] = {});
+        d[r.player.position] = roundPts((d[r.player.position] || 0) + (r.stats.pts_ppr || 0));
+      }
       const positions = r.player.fantasy_positions || [r.player.position];
       const key = normalizeName(`${r.player.first_name} ${r.player.last_name}`);
       for (const pos of positions) byName.set(`${key}|${pos}`, r);
@@ -54,6 +63,13 @@
 
     const scores = {};
     const dnp = [];
+    const details = {};
+    const usage = (st, opp) => ({
+      opp: normalizeTeam(opp) || null,
+      snap: st.tm_off_snp ? Math.round((100 * (st.off_snp || 0)) / st.tm_off_snp) : null,
+      tgt: st.rec_tgt || 0,
+      car: st.rush_att || 0,
+    });
     const matched = new Set();
     for (const p of players) {
       const override = SLEEPER_ID_OVERRIDES[p.id];
@@ -61,6 +77,7 @@
       if (row) matched.add(row.player_id);
       if (row && row.stats && row.stats.gp > 0) {
         scores[p.id] = roundPts(row.stats.pts_ppr);
+        details[p.id] = usage(row.stats, row.opponent);
       } else if (teamsPlayed.has(row ? normalizeTeam(row.team) : p.team) || (p.team === "FA" && teamsPlayed.size > 0)) {
         dnp.push(p.id); // free agents count as not playing once the week has started
       }
@@ -76,8 +93,9 @@
         position: r.player.position,
         pts: roundPts(r.stats.pts_ppr),
       };
+      details[`sl-${r.player_id}`] = usage(r.stats, r.opponent);
     }
-    return { scores, dnp: dnp.sort(), teamsPlayed: [...teamsPlayed].sort(), extras };
+    return { scores, dnp: dnp.sort(), teamsPlayed: [...teamsPlayed].sort(), extras, details, allowed };
   }
 
   // byWeek: {week: summarizeWeek result}. Folds every week's `extras` into the

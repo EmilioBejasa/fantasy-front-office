@@ -21,10 +21,23 @@ the header moves between the two sports.
 ## Running it
 
 **Live site:** https://emiliobejasa.github.io/fantasy-front-office/ — hosted free on
-GitHub Pages, deployed from the root of `master` (the empty `.nojekyll` file
-tells Pages to serve the files as they are). Every push to `master`
-redeploys it, including the daily data-refresh Actions, so the live site
-picks up new scores and values on its own.
+GitHub Pages and deployed by `.github/workflows/deploy.yml` (Pages' source is
+set to "GitHub Actions"). It runs `scripts/build.js`, which writes `dist/`:
+the same files, except `index.html`'s JSX is compiled and minified ahead of
+time with esbuild and Tailwind is a prebuilt `tailwind.css`. Visitors don't
+download Babel (~630KB) or the Tailwind Play CDN script, or wait for them to
+run. Local scripts get a content hash in their URL (`?v=`), and the data
+files the page loads on demand get the deploy's `BUILD_ID`, so an update is
+never stuck behind a cached copy. The deploy runs on every push to `master`
+and after each data-refresh Action (a push made by a workflow's own token
+doesn't start other workflows, so it listens for them with `workflow_run`).
+So the live site picks up new scores and values on its own.
+
+`index.html` itself is never rewritten by the build. It still runs as is
+(in-browser Babel and the Tailwind CDN) when double-clicked or served
+locally, and the refresh scripts keep editing its data blocks in place. To
+try the built version locally: `npm install --no-save esbuild@0.24.0
+tailwindcss@3.4.17`, `node scripts/build.js`, then serve `dist/`.
 
 **On a phone:** open the live site, then Share → **Add to Home Screen**
 (Safari) or ⋮ → **Install app** (Chrome). It opens full screen like an
@@ -116,7 +129,11 @@ The page is laid out like a website, themed as an **executive front office**
   the rooms people open most (`MobileTabBar`, `TAB_BAR`). Football: Scoreboard,
   Waiver Desk, Film Room, Trade Desk, Boardroom. Basketball: Scoreboard, Waiver
   Desk, Big Board, Trade Desk, Training Room. The hamburger still lists every
-  room.
+  room. On the home page, phones get the Football | Basketball switch under the
+  intro (the header one is desktop-only), and the chosen sport's rooms are
+  listed first, matching the tab bar.
+- **Week pickers** stay on one line and scroll sideways on narrow screens,
+  with the selected week scrolled into view (`PillGroup`'s `scroll`).
 - A **footer** with links to every room and the data sources (Sleeper,
   FantasyCalc, DraftSharks, Yahoo Sports).
 - **Color:** each tool keeps its own color and icon (`PAGE_STYLE`), used on
@@ -187,14 +204,24 @@ including future weeks up to the player's earliest possible return (or the
 rest of the season for season-ending injuries). OUT and IR weeks don't
 count toward GP or AVG.
 
+**Usage columns.** On desktop the by-week table also shows each scorer's
+opponent, share of the team's offensive snaps, targets and carries, from the
+same live feed (`details` in `summarizeWeek`). They're blank on the saved
+snapshot.
+
 ## Weekly Rankings (Film Room)
 
 `#/rankings` (`NflRankings`) ranks every QB, RB, WR and TE by Sleeper's
 projected points for the week (`fetchWeekProjections`), in the shared
 Scoring setting: Sleeper's own `pts_ppr`, `pts_half_ppr` or `pts_std`. TE
 premium adds its bonus for each projected TE catch (`projectedPoints`).
-Each row shows the position rank, team, opponent and the player's Sleeper
-injury designation. Players on bye have no projection, so they aren't
+Each row shows the position rank, team, matchup and the player's Sleeper
+injury designation. The matchup (`Matchup`) is home or away and the game
+day, from Sleeper's season schedule (`fetchNflSchedule`, no kickoff times),
+plus a tag: **Good** when the opponent is one of the 8 defenses allowing the
+most PPR points per game to that position this season, **Tough** for the 8
+allowing the least (`defenseRanks`, built from `allowed` in the live weekly
+stats; hover for the numbers). Players on bye have no projection, so they aren't
 listed. It opens on the current week (`/state/nfl`), with the next week one
 click away, and shows the top 150 for the chosen position.
 
@@ -216,14 +243,30 @@ hours, straight from Sleeper's own trending-add/drop endpoint, refetched on
 every page load. This is raw community activity — add/drop counts only, no
 reasoning — which is what distinguishes it from the curated list below.
 
-Turning player IDs into names requires Sleeper's `/players/nfl` endpoint,
-which its own docs describe as a large (~5MB+) payload meant to be fetched
-at most once a day, not per-request — so the app trims that response down to
-skill positions (QB/RB/WR/TE) before caching it in `localStorage` for 24
-hours (`SLEEPER_PLAYERS_CACHE_KEY` in `index.html`), and only the small
-trending-list request re-fires when you toggle Adds/Drops.
+Turning player IDs into names (and the live injury report) needs Sleeper's
+`/players/nfl` list: ~15MB, ~2.5MB gzipped. So `scripts/refresh-players.js`
+trims it to rostered QB/RB/WR/TE and the fields the app uses
+(`scripts/lib/sleeper-players.js`) and writes `data/nfl-players.js` (~150KB,
+~30KB gzipped). `.github/workflows/refresh-players.yml` runs it every 3 hours,
+since injury designations change through the day. The page loads that file
+on demand (`fetchSleeperPlayerMap`) and caches it in `localStorage` for 6
+hours (`SLEEPER_PLAYERS_CACHE_KEY`). Only if the file is missing or more
+than 12 hours old does it fetch the full list from Sleeper itself.
 
-Below that is the **hand-picked** list, each entry tagged with a priority
+**Your league** (`MyLeagueBar`, both Waiver Desks): connect a Sleeper
+username (or league ID) and pick a league. **Available only** then hides
+anyone already on a roster in it, and **Everyone** shows them tagged
+"Rostered". The choice is saved per sport (`ff-valuediff:my-league`:
+league ID, name, user ID and the toggle; rosters are fetched fresh each
+visit and on the refresh tick, `useMyLeagueState`). It also stars **your**
+players (★) wherever a player name link appears, puts a "Your league" link on
+the home page, and can be set from a Boardroom league page (**Make this my
+league**).
+
+Below that is the **hand-picked** list, labeled with the week it's for
+(`WAIVER_TARGETS_WEEK`) and when it was updated. Once Sleeper's current week
+moves past that week, an amber note says the list hasn't been rebuilt yet,
+so stale notes don't pass as current. Each entry is tagged with a priority
 (Must Add / Speculative / Streamer / Deep League) and a one-line reason.
 It's a single **always-current** list (`WAIVER_TARGETS` in `index.html`, a
 flat array) meant to reflect this week's best targets, replaced wholesale as
@@ -231,8 +274,9 @@ the season moves on rather than accumulating a new dated list every week —
 sorted by priority (Must Add first, Deep League last) regardless of the
 order entries were added in. There's no live ownership/snap-share source to
 pull this part from (that's what the Sleeper panel above is for), so it's
-edited by hand — update `WAIVER_TARGETS` as real in-season news (injuries,
-depth-chart moves, snap counts) comes in.
+edited by hand — update `WAIVER_TARGETS` (and `WAIVER_TARGETS_WEEK` /
+`WAIVER_TARGETS_UPDATED_ON`) as real in-season news (injuries, depth-chart
+moves, snap counts) comes in.
 
 If `WAIVER_TARGETS` is ever emptied out, the page shows an explicit
 "nothing added yet" state rather than a guess. As of this writing (2026-10-20) it holds
@@ -606,12 +650,17 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   A new week opens Monday before its first game, so until then the page
   opens on last week. A **Top scorers** view (`NbaTopScorers`) ranks the
   season's top 50 by total fantasy points, sortable by FPG or real points
-  per game (those two need the Big Board's minimum games).
+  per game (those two need the Big Board's minimum games). On phones the
+  Pos, Games, GP and FPG columns fold into a line under each name, so the
+  Total stays on screen.
 - **Waiver Desk** (`NbaWaivers`): Sleeper's live trending adds and drops,
-  with each player's points per game. Once the current season has two
-  weeks, a **Heating up** list appears. It shows players whose last two
-  weeks (2+ games, 20+ points per game) beat their season average by the
-  most.
+  with each player's points per game and his team's games left this fantasy
+  week and next (`nbaTeamGames`, green at 4+). A **Heating up** list shows
+  players whose last two fantasy weeks with games (2+ games, 20+ points per
+  game) beat their games before that by the most. Early in the season, while
+  a player has fewer than 3 earlier games, it compares against last season
+  instead, so the two numbers are never the same games. The **Your league**
+  bar works as on football.
 - **Training Room** (`NbaInjuries`): everyone with a current Sleeper
   designation. The order is Out and IR, then suspended, doubtful,
   questionable, game-time decision (GTD) and day-to-day (DTD). You can
@@ -619,7 +668,10 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
 - **Big Board** (`NbaRankings`): every player ranked by fantasy points per
   game, with games played, total and per-game PTS / REB / AST / STL / BLK /
   3PM / TO. A player needs 20 games for a finished season, or a third of the
-  games played so far mid-season.
+  games played so far mid-season. During the season, **G left** and **Next**
+  show the team's games still to play this fantasy week and next week,
+  from Sleeper's schedule (`fetchSchedule`, cached 6 hours and saved in the
+  snapshot).
 - **Trade Desk** (`NbaTrade`): the football Trade Desk's formula
   (`evaluateTrade`, same stud adjustment and roster spot credit) with
   13-man rosters. Values are **projected rest-of-season fantasy points**

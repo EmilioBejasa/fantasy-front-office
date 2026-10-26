@@ -1,0 +1,44 @@
+# Re-writes data/nfl-players.js (Sleeper's NFL player list, trimmed) and
+# commits it if anything changed. The page loads this instead of Sleeper's
+# full ~2.5MB list; injury designations change through the day, so it runs
+# every 3 hours rather than daily.
+name: Refresh players
+
+on:
+  schedule:
+    - cron: "15 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shares a group with the other refresh jobs so they never push over each other.
+concurrency:
+  group: refresh-index-html
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Refresh players from Sleeper
+        run: node scripts/refresh-players.js
+
+      - name: Commit if changed
+        run: |
+          git add data/nfl-players.js
+          if git diff --cached --quiet; then
+            echo "No player changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh NFL players from Sleeper ($(date -u +%Y-%m-%d))"
+          git pull --rebase
+          git push

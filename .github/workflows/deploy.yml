@@ -40,10 +40,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install build tools
+        run: npm install --no-save --no-package-lock esbuild@0.24.0 tailwindcss@3.4.17
+
+      # The page's own math and the shared libraries (tests/). A failure stops
+      # the deploy, so the live site keeps its last good version.
+      - name: Test
+        run: node --test "tests/*.test.js"
+
       - name: Build
-        run: |
-          npm install --no-save --no-package-lock esbuild@0.24.0 tailwindcss@3.4.17
-          node scripts/build.js
+        run: node scripts/build.js
 
       - uses: actions/configure-pages@v5
 

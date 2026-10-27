@@ -1,6 +1,6 @@
-# Re-bakes the DYNASTY_VALUES snapshot in index.html from FantasyCalc and
-# commits it if anything changed. The page still pulls live values on load;
-# this keeps the offline fallback current.
+# Re-bakes the dynasty values snapshot (data/dynasty-values.js) from
+# FantasyCalc and commits it if anything changed. The page still pulls live
+# values on load; this keeps the offline fallback current.
 name: Refresh dynasty values
 
 on:
@@ -33,13 +33,13 @@ jobs:
 
       - name: Commit if changed
         run: |
-          if git diff --quiet -- index.html; then
+          git add data/dynasty-values.js
+          if git diff --cached --quiet; then
             echo "No value changes."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add index.html
           git commit -m "Refresh dynasty values from FantasyCalc ($(date -u +%Y-%m-%d))"
           git pull --rebase
           git push

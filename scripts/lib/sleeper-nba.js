@@ -42,8 +42,11 @@
     return out;
   };
 
+  // `scoring` is a preset's name, or a league's own weights by stat key
+  // ({pts: 1, reb: 1.2, …}, as in a Sleeper league's scoring_settings).
   const fantasyPoints = (stats, scoring) =>
-    Object.entries(SCORING[scoring] || SCORING.standard).reduce((s, [k, w]) => s + w * (stats[k] || 0), 0);
+    Object.entries((typeof scoring === "object" && scoring) || SCORING[scoring] || SCORING.standard)
+      .reduce((s, [k, w]) => s + w * (stats[k] || 0), 0);
 
   const isPlayer = (r) => r && r.player && !String(r.player_id).startsWith("TEAM");
   const info = (r) => ({
@@ -119,7 +122,7 @@
   const fetchTrending = (direction, limit = 25) =>
     getJson(`${API}/players/nba/trending/${direction}?lookback_hours=24&limit=${limit}`);
 
-  const api = { SCORING, fantasyPoints, fetchState, fetchSeason, fetchWeek, fetchPlayers, fetchTrending, fetchProjections, fetchSchedule };
+  const api = { SCORING, STAT_KEYS: KEEP, fantasyPoints, fetchState, fetchSeason, fetchWeek, fetchPlayers, fetchTrending, fetchProjections, fetchSchedule };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SleeperNBA = api;
 })(typeof window !== "undefined" ? window : globalThis);

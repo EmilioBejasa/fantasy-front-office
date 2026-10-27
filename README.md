@@ -6,16 +6,16 @@ so saved settings carry over.)
 
 A fantasy football companion. Three tabs cover this season, on one shared player pool:
 **Weekly Scores** (real results by week, or a full-season grid),
-**Waiver Wire Targets** (live Sleeper trending activity plus a hand-picked
-pickup list), and **Injuries** (a live weekly injury report, plus who's out for the season or on IR/PUP,
+**Waiver Wire Targets** (live Sleeper trending activity, live picks worked
+out from this season's usage, and a hand-picked pickup list), and **Injuries** (a live weekly injury report, plus who's out for the season or on IR/PUP,
 and the earliest week each player can return). Three more cover dynasty
 leagues: **Dynasty Values** (live trade values for every player and rookie
 pick), a **Trade Calculator** (plus every team in a Sleeper league ranked by
 value), and a **2027 Class** preview of next year's rookies.
 
 There's also a **basketball** side for season-long (redraft) points
-leagues, with five rooms: Scoreboard, Waiver Desk, Training Room, Big Board
-and Trade Desk. See "Basketball" below. A Football | Basketball switch in
+leagues, with eight rooms: Scoreboard, Waiver Desk, Training Room, Boardroom,
+Big Board, Analytics Dept., War Room and Trade Desk. See "Basketball" below. A Football | Basketball switch in
 the header moves between the two sports.
 
 ## Running it
@@ -35,7 +35,7 @@ So the live site picks up new scores and values on its own.
 
 `index.html` itself is never rewritten by the build. It still runs as is
 (in-browser Babel and the Tailwind CDN) when double-clicked or served
-locally, and the refresh scripts keep editing its data blocks in place. To
+locally, and the hand-kept lists (`WAIVER_TARGETS`, `INJURED_RESERVE`, `CLASS_2027`) are edited in place; the refresh scripts write to `data/`. To
 try the built version locally: `npm install --no-save esbuild@0.24.0
 tailwindcss@3.4.17`, `node scripts/build.js`, then serve `dist/`.
 
@@ -82,8 +82,15 @@ The page is laid out like a website, themed as an **executive front office**
   | Film Room | Weekly Rankings (and Start / Sit) |
   | Boardroom | My Leagues |
   | Value Board | Dynasty Values |
+  | War Room | Draft Board |
   | Trade Desk | Trade Calculator |
   | Scouting Dept. | 2027 Rookie Class |
+  | Analytics Dept. | Projected Rankings (basketball) |
+  | Player File | Player Profile (no nav entry; reached from player names) |
+
+  Basketball reuses the football names for its matching rooms (Scoreboard,
+  Waiver Desk, Training Room, Boardroom, War Room, Trade Desk), plus the Big
+  Board (Player Rankings).
 
   The nav, home folder tabs, page labels and browser tab titles use the room
   name. The page heading still says what the tool is.
@@ -111,8 +118,9 @@ The page is laid out like a website, themed as an **executive front office**
   remembers the choice (`ff-valuediff:theme`). The choice is applied in
   `<head>` before render, so there's no flash.
 - **Every page has its own URL**: `#/scores`, `#/waivers`, `#/injuries`,
-  `#/leagues`, `#/values`, `#/trade`, `#/2027`, and for basketball `#/nba/scores`,
-  `#/nba/waivers`, `#/nba/injuries`, `#/nba/rankings`, `#/nba/trade`. So the
+  `#/rankings`, `#/leagues`, `#/values`, `#/draftboard`, `#/trade`, `#/2027`, and for
+  basketball `#/nba/scores`, `#/nba/waivers`, `#/nba/injuries`, `#/nba/leagues`,
+  `#/nba/rankings`, `#/nba/projections`, `#/nba/draftboard`, `#/nba/trade`. So the
   back button, bookmarks and reloads all work. A trade link (`#trade=…`, or
   `#nbatrade=…` for basketball) opens that Trade Desk with the trade, and
   leaving and coming back keeps it.
@@ -160,6 +168,24 @@ The page is laid out like a website, themed as an **executive front office**
   color (set through `--pill-accent`) and a soft glow. Main actions are
   polished brass buttons that lift on hover, and table and team rows
   highlight on hover.
+- **If a room crashes** (say, a malformed row from a live feed), `RoomBoundary`
+  shows a message with Reload and Lobby buttons in place of that room, and the
+  rest of the site keeps working. It logs the error to the console as `[FFO]`.
+- **Keyboard and screen readers:** a "Skip to content" link (first Tab on any
+  page), a focus ring on every link, button, toggle and input, labels on
+  icon-only buttons (+A / +B, Start / Sit's +, the bell, theme and menu) and on
+  every search box.
+- **Roster alerts (the bell):** once a league is connected with your Sleeper
+  username (so the site knows which team is yours), a bell in the header lists
+  every change in your players' Sleeper designations (Questionable → Out, IR,
+  back to active), football and basketball, newest first, with a count of new
+  ones (`useRosterAlerts`, `AlertsButton`, kept in `ff-valuediff:alerts-v1`).
+  It checks on every visit and every 30 minutes while the site is open.
+  **Also notify me in this browser** turns on browser notifications for
+  changes found while the site is open. The site has no server, so it can't
+  notify while it's closed (that would take a push service); the bell catches
+  up on the next visit. Some phone browsers only show notifications from a
+  service worker, so there it's the bell only.
 
 ## Weekly Scores
 
@@ -167,8 +193,11 @@ Every player in the database for a given week, ranked highest to lowest by
 that week's actual PPR fantasy points, or as a full Week 1-18 season grid
 with a running total/average, sorted by either one (**Sort**, or the TTL and
 AVG headers). The position filter defaults to **RB**, and
-its buttons are ordered RB, WR, QB, TE, ALL — skill positions people are
+its buttons are ordered RB, WR, QB, TE, K, DEF, ALL — skill positions people are
 actually checking waivers/streamers for first, the unfiltered view last.
+Kickers and team defenses come straight from Sleeper's feed as extra players
+(a defense's id is its team code, `sl-SEA`); they have no profile page and
+no usage columns.
 Each week's by-week view also shows that week's real bye teams (the full
 2026 schedule, Weeks 5-14, hard-coded in `BYE_WEEKS` in `index.html`) —
 that part is known for the whole season in advance, so it's shown
@@ -192,18 +221,19 @@ name and position, plus a short `SLEEPER_ID_OVERRIDES` list for names that
 differ (e.g. "Kenny" Gainwell, "Cam" Ward). Sleeper's `WAS` is mapped to this
 app's `WSH`. If you add a player whose Sleeper name differs, add them there.
 
-`WEEKLY_SCORES` and `DID_NOT_PLAY` in `index.html` are a **baked-in
-snapshot**, shown until live data arrives and used if Sleeper can't be
-reached. To refresh the snapshot, run `node scripts/refresh-scores.js` (Node
-18+, `--dry-run` to preview). A GitHub Action
-(`.github/workflows/refresh-scores.yml`) also runs it daily at 10:00 UTC
-and commits `index.html` when scores change; it can be run by hand from
-the repo's Actions tab too. As of 2026-10-06 it holds all of Weeks 1-4,
+`data/nfl-scores.js` is a **saved snapshot** (scores, did-not-play lists
+and the extra players), used only if Sleeper can't be reached. The page
+loads it only then (`loadNflScoresSnapshot`), so most visits never download
+it. To refresh it, run `node scripts/refresh-scores.js` (Node 18+,
+`--dry-run` to preview; the file format is in `scripts/lib/snapshots.js`).
+A GitHub Action (`.github/workflows/refresh-scores.yml`) also runs it daily
+at 10:00 UTC and commits the file when scores change; it can be run by hand
+from the repo's Actions tab too. As of 2026-10-06 it holds all of Weeks 1-4,
 including the Monday night NO@ATL game.
 
-**OUT and IR instead of 0.** `WEEKLY_SCORES` only lists players who
-actually played. Players whose team played but who didn't are listed in
-`DID_NOT_PLAY` and show **OUT**, both in the grid and at the bottom of the
+**OUT and IR instead of 0.** The weekly scores only list players who
+actually played. Players whose team played but who didn't are in the week's
+did-not-play list and show **OUT**, both in the grid and at the bottom of the
 by-week table. Weeks inside an Injured Reserve stint show **IR** instead,
 including future weeks up to the player's earliest possible return (or the
 rest of the season for season-ending injuries). OUT and IR weeks don't
@@ -216,7 +246,7 @@ snapshot.
 
 ## Weekly Rankings (Film Room)
 
-`#/rankings` (`NflRankings`) ranks every QB, RB, WR and TE by Sleeper's
+`#/rankings` (`NflRankings`) ranks every QB, RB, WR, TE, K and DEF by Sleeper's
 projected points for the week (`fetchWeekProjections`), in the shared
 Scoring setting: Sleeper's own `pts_ppr`, `pts_half_ppr` or `pts_std`. TE
 premium adds its bonus for each projected TE catch (`projectedPoints`).
@@ -268,10 +298,34 @@ players (★) wherever a player name link appears, puts a "Your league" link on
 the home page, and can be set from a Boardroom league page (**Make this my
 league**).
 
+**Live picks** (`LivePicks`, `buildLivePicks`) are worked out on every visit
+from the live weekly scores and Sleeper's designations, so the desk is never
+without a current list. They're for the waiver week (`waiverWeek`): the
+latest week with scores, or the next one once only Monday night is left.
+Each candidate's last two games are compared with his games before that
+(weeks his team played without him count as zeros, so a player who came off
+the bench shows up). The score adds:
+
+- half his recent points per game (a third for QBs);
+- his rise in opportunities (carries + 1.5 × targets for RBs, 1.6 × targets
+  for WRs and TEs) and in snap share;
+- Sleeper adds in the last 48 hours, on a log scale from 1,000;
+- 3 points when a 10-point-a-game starter at his position on his team is out
+  or on IR, and minus 4 when he's on bye that week.
+
+Players need 7+ points and 35%+ of snaps a game over those two games (QBs 14+
+and 50%+). Anyone ruled out, doubtful, suspended or on IR/PUP is left off.
+Without a connected league, the preseason top 120 of `samplePlayers` count as
+rostered; with one, availability is exact. A score of 20+ is **Must Add**,
+14+ **Speculative**, and below that QBs and TEs are **Streamers** and the
+rest **Deep League**. Each row's reason is written from the same numbers
+("Jeremiyah Love is out (ankle); snaps up from 4% to 49%; …"). The top 20
+are listed.
+
 Below that is the **hand-picked** list, labeled with the week it's for
-(`WAIVER_TARGETS_WEEK`) and when it was updated. Once Sleeper's current week
-moves past that week, an amber note says the list hasn't been rebuilt yet,
-so stale notes don't pass as current. Each entry is tagged with a priority
+(`WAIVER_TARGETS_WEEK`) and when it was updated. Once the waiver week moves
+past that week, the live picks move to the top and the hand-picked list
+folds away under "a week behind", so stale notes don't pass as current. Each entry is tagged with a priority
 (Must Add / Speculative / Streamer / Deep League) and a one-line reason.
 It's a single **always-current** list (`WAIVER_TARGETS` in `index.html`, a
 flat array) meant to reflect this week's best targets, replaced wholesale as
@@ -317,9 +371,17 @@ surgery, back Week 12 at the earliest after the Rams' Week 11 bye). Nine are sea
 (knee surgery), Jayden Higgins (torn ACL), Pearsall (PCL surgery), Hurts
 (blood clots), Jayden Reed (neck surgery), Jaylin Lane (ankle fracture),
 Durham Smythe (torn Achilles) and Josh Oliver (torn biceps). Entries can
-use an extra player's `sl-` id too. Edit the list by hand as
-players are placed on or activated from IR. The same list drives the IR
-cells in Weekly Scores.
+use an extra player's `sl-` id too. The same list drives the IR cells in
+Weekly Scores.
+
+**The site keeps it current from Sleeper** (`mergeInjuredList`): anyone in
+the pool Sleeper lists on IR or PUP who isn't in `INJURED_RESERVE` yet is
+added (marked *from Sleeper*, starting the week after his last game, and out
+for the season if the injury is a torn ACL or Achilles), and hand-kept
+entries Sleeper shows as active again are dropped (season-ending ones stay).
+So the hand list only needs editing to add details Sleeper doesn't have: a
+better injury description, a stint's real start week, or a season-ending
+call for another injury.
 
 ## Dynasty tabs
 
@@ -372,18 +434,17 @@ league (`settingsFromLeague`). Keeper leagues count as dynasty, and guillotine l
 tab only uses the QB setting and always uses dynasty values.
 
 The fetch-and-trim logic lives in `scripts/lib/fantasycalc.js`, loaded with
-a plain `<script>` tag like `sleeper-scores.js`. `DYNASTY_VALUES` in
-`index.html` is a **baked-in snapshot** of the 12-team PPR dynasty values in
-both QB formats, shown until live data arrives and used if FantasyCalc can't
-be reached (for other settings the page says the snapshot is only an
-approximation). Each row is stored as
-a compact array in `DYNASTY_FIELDS` order to keep the file small. To
+a plain `<script>` tag like `sleeper-scores.js`. `data/dynasty-values.js`
+is a **saved snapshot** of the 12-team PPR dynasty values in both QB
+formats, loaded only if FantasyCalc can't be reached (for other settings the
+page says the snapshot is only an approximation). Until values arrive, the
+dynasty pages are empty for a moment, or show the last settings' values when
+you switch. Each row is a compact array in the file's `fields` order. To
 refresh it, run `node scripts/refresh-dynasty.js` (`--dry-run` to
 preview). A GitHub Action (`.github/workflows/refresh-dynasty.yml`) runs
 it every Tuesday at 11:00 UTC and commits on change. It shares a
 concurrency group with the scores Action so the two never push over each
-other. Both scripts use `scripts/lib/bake.js` to rewrite their block of
-`index.html`.
+other.
 
 ### Dynasty Values
 
@@ -671,6 +732,26 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   designation. The order is Out and IR, then suspended, doubtful,
   questionable, game-time decision (GTD) and day-to-day (DTD). You can
   filter to fantasy-relevant players (15+ points per game) or everyone.
+- **Boardroom** (`NbaLeagues`, `#/nba/leagues`): your connected Sleeper
+  basketball league (the Waiver Desk's "Your league"), or any league at
+  `#/nba/leagues/<id>` (**Make this my league** saves it). Players are valued
+  in the league's own scoring (`nbaLeagueScoring`: its `scoring_settings` as
+  weights on the box-score stats the app keeps, so double-double and
+  triple-double bonuses count; other bonuses aren't modeled) with the Trade
+  Desk's rest-of-season values. It shows:
+  - **this week's matchup** (`nbaMatchupPairs`): Sleeper's points so far for
+    each side, plus each starter's points per game × availability × his team's
+    games left this week, and the win odds from the football matchup's model
+    (`winOdds`, with `STANDINGS_SPREAD` of the remaining points as the
+    spread). Each starter shows his points this week and games left;
+  - **around the league**: every other matchup's score, projection and favorite;
+  - **standings**: record and points for, from Sleeper;
+  - **power rankings**: each team's best lineup (as many players as the league
+    starts) by rest-of-season value. Open a team for its whole roster.
+  The week is the league's (`settings.leg`) and games left come from the
+  NBA schedule for the current fantasy week. Opened by league ID with no
+  Sleeper user, a **Your team** menu picks your team. It re-checks with the
+  page's refresh tick, so live scores move.
 - **Big Board** (`NbaRankings`): every player ranked by fantasy points per
   game, with games played, total and per-game PTS / REB / AST / STL / BLK /
   3PM / TO. A player needs 20 games for a finished season, or a third of the
@@ -744,15 +825,28 @@ browser (every table in the app is read-only).
 has scored fantasy points this season but isn't in `samplePlayers`
 (waiver-wire breakouts, backup QBs who started, etc.) is added
 automatically from Sleeper's stats, as `sl-<Sleeper id>` (`mergeExtras` in
-`scripts/lib/sleeper-scores.js`; baked copy in `EXTRA_PLAYERS`). Players
+`scripts/lib/sleeper-scores.js`; saved copy in `data/nfl-scores.js`). Players
 who've only ever logged zeros (blockers, kneel-down QBs) are left out. These
 added players never show OUT: they're blank in weeks they didn't play. As of
 2026-10-05 that's 218 extra players. Each week's top 24 QBs/TEs and top 50
 RBs/WRs match Sleeper's own numbers exactly.
 
-Each entry also still carries an `adp` field left over from this app's
-original ADP-comparison tool (see "History" below); nothing reads it
-anymore; it's simply unused.
+The entries used to carry an `adp` field from this app's original
+ADP-comparison tool (see "History" below). Nothing read it, so it was
+removed on 2026-10-26.
+
+## Tests
+
+`node --test "tests/*.test.js"` (Node 18+, with esbuild installed:
+`npm install --no-save --no-package-lock esbuild@0.24.0`). `tests/load-app.js`
+compiles `index.html`'s app script and runs it in a Node sandbox with a stub
+browser and a React that never renders, so the tests call the page's own
+functions rather than copies: the trade formula, IR return weeks, league
+settings, win odds, search, routes, live waiver picks, the IR merge, the
+basketball league math and roster alerts. `tests/libs.test.js` covers
+`scripts/lib` (score matching, extras, snapshot files). The deploy runs them
+before building, and a failure stops the deploy, so the live site keeps its
+last good version.
 
 ## History
 

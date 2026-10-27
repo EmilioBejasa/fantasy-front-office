@@ -29,6 +29,9 @@
     String(s || "").toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "").replace(/[^a-z]/g, "");
 
   const SKILL_POSITIONS = ["QB", "RB", "WR", "TE"];
+  // Kickers and team defenses are scored too (as extras: a defense's Sleeper id
+  // is its team code, "sl-SEA"), but only skill players count toward `allowed`.
+  const FANTASY_POSITIONS = [...SKILL_POSITIONS, "K", "DEF"];
   const roundPts = (pts) => Math.round((pts || 0) * 10) / 10;
 
   // rows: the raw stats array for one week. players: samplePlayers.
@@ -36,7 +39,7 @@
   // scores for anyone who took a snap, DNP for anyone whose team has played
   // but who didn't. Players whose team hasn't played yet (bye, or a game later
   // in the week) are in neither, so they stay blank instead of being guessed
-  // at. `extras` is every other QB/RB/WR/TE who played, keyed by Sleeper id
+  // at. `extras` is every other QB/RB/WR/TE/K/DEF who played, keyed by Sleeper id
   // ({name, team, position, pts}), so rankings aren't limited to `players`
   // (see mergeExtras). `details` is each scorer's usage, keyed the same way the
   // scores end up ({opp, snap: % of team offensive snaps, tgt, car}); the page
@@ -64,12 +67,13 @@
     const scores = {};
     const dnp = [];
     const details = {};
-    const usage = (st, opp) => ({
+    // Kickers and defenses get just the opponent.
+    const usage = (st, opp, pos) => SKILL_POSITIONS.includes(pos) ? {
       opp: normalizeTeam(opp) || null,
       snap: st.tm_off_snp ? Math.round((100 * (st.off_snp || 0)) / st.tm_off_snp) : null,
       tgt: st.rec_tgt || 0,
       car: st.rush_att || 0,
-    });
+    } : { opp: normalizeTeam(opp) || null, snap: null, tgt: null, car: null };
     const matched = new Set();
     for (const p of players) {
       const override = SLEEPER_ID_OVERRIDES[p.id];
@@ -77,7 +81,7 @@
       if (row) matched.add(row.player_id);
       if (row && row.stats && row.stats.gp > 0) {
         scores[p.id] = roundPts(row.stats.pts_ppr);
-        details[p.id] = usage(row.stats, row.opponent);
+        details[p.id] = usage(row.stats, row.opponent, p.position);
       } else if (teamsPlayed.has(row ? normalizeTeam(row.team) : p.team) || (p.team === "FA" && teamsPlayed.size > 0)) {
         dnp.push(p.id); // free agents count as not playing once the week has started
       }
@@ -86,14 +90,14 @@
     const extras = {};
     for (const r of rows) {
       if (!r || !r.player || matched.has(r.player_id) || !(r.stats && r.stats.gp > 0)) continue;
-      if (!SKILL_POSITIONS.includes(r.player.position)) continue;
+      if (!FANTASY_POSITIONS.includes(r.player.position)) continue;
       extras[r.player_id] = {
         name: `${r.player.first_name} ${r.player.last_name}`,
         team: normalizeTeam(r.team),
         position: r.player.position,
         pts: roundPts(r.stats.pts_ppr),
       };
-      details[`sl-${r.player_id}`] = usage(r.stats, r.opponent);
+      details[`sl-${r.player_id}`] = usage(r.stats, r.opponent, r.player.position);
     }
     return { scores, dnp: dnp.sort(), teamsPlayed: [...teamsPlayed].sort(), extras, details, allowed };
   }
@@ -164,7 +168,16 @@
   }
   const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
-  const api = { summarizeWeek, mergeExtras, matchSleeperIds, normalizeName, fetchState, fetchWeek, weeksToFetch, SLEEPER_ID_OVERRIDES };
+  // Whether a week's games are all over, so its scores can be cached for
+  // longer. Sleeper moves `week` on ahead of Monday night's game being final
+  // and `display_week` a day or so later, so the earlier of the two is the
+  // week still in progress.
+  function isWeekFinal(state, week) {
+    if (state.season_type === "post") return true;
+    return week < Math.min(state.week, state.display_week || state.week);
+  }
+
+  const api = { summarizeWeek, mergeExtras, matchSleeperIds, normalizeName, fetchState, fetchWeek, weeksToFetch, isWeekFinal, SLEEPER_ID_OVERRIDES };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SleeperScores = api;
 })(typeof window !== "undefined" ? window : globalThis);

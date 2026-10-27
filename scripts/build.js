@@ -3,7 +3,7 @@
 // compiled and minified ahead of time and Tailwind is a prebuilt stylesheet,
 // so visitors don't download Babel (~630KB) and the Tailwind Play CDN script
 // or wait for them to run. index.html itself stays as it is, so it still works
-// double-clicked, and the refresh scripts keep editing it in place.
+// double-clicked, and the hand-kept lists in it are edited in place.
 //
 // Usage: node scripts/build.js   (needs esbuild and tailwindcss installed;
 // the deploy workflow runs `npm install --no-save esbuild tailwindcss` first)

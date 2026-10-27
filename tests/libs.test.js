@@ -56,6 +56,38 @@ test("trimPlayers keeps two-way players under their skill position", () => {
   assert.equal(t[1379].position, "RB");
 });
 
+test("pickNbaWaivers: hot, available and opportunity picks, skipping the drafted and the injured", () => {
+  const { pickNbaWaivers } = require("../scripts/lib/nba-waivers");
+  const points = (s) => s.pts || 0;
+  const game = (date, pts, min = 30) => ({ date, stats: { pts, sp: min * 60 } });
+  const two = (pts, min) => [game("2026-10-25", pts, min), game("2026-10-26", pts, min)];
+  const player = (id, team, status = null) => ({ name: `P${id}`, position: "PG", positions: ["PG"], team, status });
+  const players = {
+    1: player(1, "LAL"), 2: player(2, "LAL"), 3: player(3, "BOS"), 4: player(4, "BOS", "Out"),
+    5: player(5, "GSW"), 6: player(6, "GSW", "Out"), 7: player(7, "MIA"), 8: player(8, "MIA"),
+  };
+  const weeks = [[
+    { id: "1", games: two(34) },     // hot and widely added: Must Add
+    { id: "2", games: two(40) },     // drafted early: assumed rostered
+    { id: "3", games: two(45) },     // fine, but...
+    { id: "4", games: two(45) },     // ...this one is Out
+    { id: "5", games: two(24) },     // teammate 6 (a 35-point player) is out: Speculative
+    { id: "7", games: two(25) },     // 3+ games left: Streamer
+    { id: "8", games: two(40, 12) }, // too few minutes
+  ]];
+  const targets = pickNbaWaivers({
+    state: { season_type: "regular", week: 2 }, weeks, players, points, today: "2026-10-27",
+    season: [{ id: "6", gp: 4, stats: { pts: 140 } }], previous: [],
+    projections: [{ id: "2", adp: 40 }], adds: [{ player_id: "1", count: 9000 }],
+    schedule: ["2026-10-28", "2026-10-29", "2026-10-31"].map((date) => ({ date, week: 2, home: "MIA", away: "NYK", done: false })),
+  });
+  const by = Object.fromEntries(targets.map((t) => [t.id, t.priority]));
+  assert.deepEqual(by, { 1: "Must Add", 3: "Must Add", 5: "Speculative", 7: "Streamer" });
+  assert.match(targets.find((t) => t.id === "5").note, /P6 is out/);
+  assert.match(targets.find((t) => t.id === "1").note, /9,000 adds/);
+  assert.deepEqual(pickNbaWaivers({ state: { season_type: "pre" } }), []);
+});
+
 test("mergeExtras: players who only logged zeros are left out", () => {
   const byWeek = {
     1: { scores: { a: 1 }, extras: { 10: { name: "Ten", team: "X", position: "WR", pts: 4 }, 11: { name: "Zero", team: "X", position: "QB", pts: 0 } } },

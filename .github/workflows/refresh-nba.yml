@@ -1,5 +1,6 @@
 # Re-writes data/nba-snapshot.js (NBA season totals, players and recent weeks)
-# from Sleeper and commits it if anything changed. The basketball pages still
+# and data/nba-waivers.js (the Waiver Desk's pickups for today) from Sleeper
+# and commits them if anything changed. The basketball pages still
 # pull live from Sleeper; this keeps their fallback current.
 name: Refresh NBA
 
@@ -31,9 +32,12 @@ jobs:
       - name: Refresh NBA snapshot from Sleeper
         run: node scripts/refresh-nba.js
 
+      - name: Re-pick today's NBA waiver targets
+        run: node scripts/refresh-nba-waivers.js
+
       - name: Commit if changed
         run: |
-          git add data/nba-snapshot.js
+          git add data/nba-snapshot.js data/nba-waivers.js
           if git diff --cached --quiet; then
             echo "No NBA changes."
             exit 0

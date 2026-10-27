@@ -1136,7 +1136,8 @@ function buildLivePicks({ data, sleeperPlayers, resolve, adds, skip }) {
 }
 
 // Player, priority and reason rows, shared by the live and hand-picked lists.
-function PickTable({ rows, ownerOf, emptyText }) {
+// `extra` adds a line under a player's team (the basketball games-left note).
+function PickTable({ rows, ownerOf, emptyText, sport = "nfl", extra }) {
   return (
     <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
       <table className="w-full border-collapse text-sm">
@@ -1154,8 +1155,9 @@ function PickTable({ rows, ownerOf, emptyText }) {
           {rows.map((t) => (
             <tr key={t.id} className="border-b" style={{ borderColor: "var(--border)" }}>
               <td className="px-3 py-2 align-top">
-                <div><PlayerLink id={t.id} name={t.name} pos={t.position}>{t.name}</PlayerLink></div>
+                <div><PlayerLink sport={sport} id={t.id} name={t.name} pos={t.position}>{t.name}</PlayerLink></div>
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}><PosBadge pos={t.position} /> {t.team}<RosteredTag owner={ownerOf(t)} /></div>
+                {extra && <div className="mt-0.5">{extra(t)}</div>}
               </td>
               <td className="px-3 py-2 align-top">
                 <span className="text-xs font-semibold" style={{ color: WAIVER_PRIORITY_COLOR[t.priority] }}>{t.priority}</span>
@@ -5700,6 +5702,47 @@ function NbaRankings({ data, settings, setSettings }) {
 
 /* ---------- Waiver Desk ---------- */
 
+// Today's pickup list, re-picked every morning by scripts/refresh-nba-waivers.js
+// (see lib/nba-waivers.js). Older than this and the page says it's out of date.
+const loadNbaWaivers = () => loadDataScript("data/nba-waivers.js", "NBA_WAIVERS");
+const NBA_WAIVERS_STALE_DAYS = 2;
+
+function NbaPickups({ games, ownerOf, hideRostered }) {
+  const [list, setList] = useState(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    loadNbaWaivers().then((l) => { if (!cancelled) setList(l); });
+    return () => { cancelled = true; };
+  }, []);
+  if (list === undefined) return null;
+  const targets = list?.targets || [];
+  const age = list ? (Date.now() - new Date(list.updatedOn + "T12:00:00").getTime()) / 86400000 : Infinity;
+  const updated = list && new Date(list.updatedOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const shown = targets.filter((t) => !(hideRostered && ownerOf(t.id)));
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Today's pickups</h3>
+        {list && <span className="text-xs" style={{ color: "var(--text-muted)" }}>updated {updated} · re-picked every morning</span>}
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        Picked from each player's last five games (20+ minutes a night), Sleeper adds, injured teammates and games left this
+        week. Players drafted inside the top 130 are left out as likely rostered. Points in the notes are Standard scoring.
+      </p>
+      {age > NBA_WAIVERS_STALE_DAYS && (
+        <p className="text-xs" style={{ color: "var(--series-amber)" }}>
+          {list ? `This list hasn't been re-picked since ${updated}, so some notes may be out of date.` : "Today's list couldn't be loaded."}
+        </p>
+      )}
+      {list && (
+        <PickTable sport="nba" rows={shown} ownerOf={(t) => ownerOf(t.id)}
+          emptyText={targets.length ? "Everyone on this list is already rostered in your league." : "No pickups stand out today."}
+          extra={(t) => <NbaGamesNote games={games} team={t.team} />} />
+      )}
+    </section>
+  );
+}
+
 function NbaWaivers({ data, settings }) {
   const [direction, setDirection] = useState("add");
   const [trend, setTrend] = useState({ status: "loading", rows: [] });
@@ -5754,8 +5797,8 @@ function NbaWaivers({ data, settings }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <NbaPageHeader title="Waiver Wire" lead="Who Sleeper managers are adding and dropping right now, and who's heating up.">
-        Trending adds and drops are live from Sleeper (last 24 hours across real Sleeper leagues). FPG is fantasy points
+      <NbaPageHeader title="Waiver Wire" lead="Today's best pickups, who Sleeper managers are adding and dropping right now, and who's heating up.">
+        Today's pickups are re-picked every morning from Sleeper's data. Trending adds and drops are live from Sleeper (last 24 hours across real Sleeper leagues). FPG is fantasy points
         per game for {nbaSeasonLabel(season)} in {settings.scoring === "espn" ? "ESPN" : "Standard"} scoring. "G left" is
         how many games the player's team still has this fantasy week (green at 4 or more), and "next" its games next week,
         from Sleeper's schedule. "Heating up"
@@ -5764,6 +5807,8 @@ function NbaWaivers({ data, settings }) {
       </NbaPageHeader>
 
       <MyLeagueBar sport="nba" />
+
+      <NbaPickups games={games} ownerOf={ownerOf} hideRostered={hideRostered} />
 
       <section className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
         <div className="flex items-center justify-between flex-wrap gap-2">

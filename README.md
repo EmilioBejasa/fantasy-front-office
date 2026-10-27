@@ -720,7 +720,14 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   per game (those two need the Big Board's minimum games). On phones the
   Pos, Games, GP and FPG columns fold into a line under each name, so the
   Total stays on screen.
-- **Waiver Desk** (`NbaWaivers`): Sleeper's live trending adds and drops,
+- **Waiver Desk** (`NbaWaivers`): **Today's pickups** first (`NbaPickups`), a
+  Must Add / Speculative / Streamer / Deep League list re-picked every morning
+  by `scripts/refresh-nba-waivers.js` (run by the Refresh NBA Action) into
+  `data/nba-waivers.js`. `scripts/lib/nba-waivers.js` picks from each
+  player's last five games (20+ minutes a night), Sleeper adds, injured
+  teammates (30+ points per game) and games left this week, leaving out
+  anyone drafted inside the top 130 (Sleeper's ADP) as likely rostered, and
+  writes each note from those numbers (Standard scoring). Then Sleeper's live trending adds and drops,
   with each player's points per game and his team's games left this fantasy
   week and next (`nbaTeamGames`, green at 4+). A **Heating up** list shows
   players whose last two fantasy weeks with games (2+ games, 20+ points per

@@ -1,0 +1,3 @@
+# Generated snapshots are compared byte for byte (tests/libs.test.js), so keep
+# them LF on every checkout.
+data/*.js text eol=lf

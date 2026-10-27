@@ -43,6 +43,19 @@ test("isWeekFinal: last week stays live until display_week moves on too", () => 
   assert.equal(isWeekFinal({ season_type: "post", week: 1, display_week: 1 }, 18), true);
 });
 
+test("trimPlayers keeps two-way players under their skill position", () => {
+  const { trimPlayers } = require("../scripts/lib/sleeper-players");
+  const t = trimPlayers({
+    12530: { full_name: "Travis Hunter", position: "DB", fantasy_positions: ["DB", "WR"], team: "JAX" },
+    1379: { full_name: "Kyle Juszczyk", position: "FB", fantasy_positions: ["RB"], team: "SF" },
+    5: { full_name: "Just A Corner", position: "CB", fantasy_positions: ["DB"], team: "JAX" },
+    6: { full_name: "Free Agent", position: "WR", team: null },
+  });
+  assert.deepEqual(Object.keys(t).sort(), ["12530", "1379"]);
+  assert.equal(t[12530].position, "WR");
+  assert.equal(t[1379].position, "RB");
+});
+
 test("mergeExtras: players who only logged zeros are left out", () => {
   const byWeek = {
     1: { scores: { a: 1 }, extras: { 10: { name: "Ten", team: "X", position: "WR", pts: 4 }, 11: { name: "Zero", team: "X", position: "QB", pts: 0 } } },

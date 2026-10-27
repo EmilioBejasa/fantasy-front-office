@@ -177,7 +177,7 @@
     return week < Math.min(state.week, state.display_week || state.week);
   }
 
-  const api = { summarizeWeek, mergeExtras, matchSleeperIds, normalizeName, fetchState, fetchWeek, weeksToFetch, isWeekFinal, SLEEPER_ID_OVERRIDES };
+  const api = { summarizeWeek, mergeExtras, matchSleeperIds, normalizeName, normalizeTeam, fetchState, fetchWeek, weeksToFetch, isWeekFinal, SLEEPER_ID_OVERRIDES };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SleeperScores = api;
 })(typeof window !== "undefined" ? window : globalThis);

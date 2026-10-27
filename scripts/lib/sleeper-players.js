@@ -12,9 +12,14 @@
     const trimmed = {};
     for (const id in all) {
       const p = all[id];
-      if (p && SKILL_POSITIONS.includes(p.position) && p.team) {
+      // Two-way players and fullbacks are listed under DB or FB, with the
+      // skill position in fantasy_positions (Travis Hunter: DB, WR).
+      const position = p && (SKILL_POSITIONS.includes(p.position)
+        ? p.position
+        : (p.fantasy_positions || []).find((pos) => SKILL_POSITIONS.includes(pos)));
+      if (position && p.team) {
         trimmed[id] = {
-          name: p.full_name, position: p.position, team: p.team, status: p.injury_status || null,
+          name: p.full_name, position, team: p.team, status: p.injury_status || null,
           injury: p.injury_body_part || null, notes: p.injury_notes || null,
           // Bio lines for player profiles.
           age: p.age || null, number: p.number ?? null, height: p.height || null, weight: p.weight || null,

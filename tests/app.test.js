@@ -162,6 +162,27 @@ test("mergeInjuredList: adds Sleeper's IR players and drops hand entries who are
   assert.ok(!merged.some((r) => r.id === entry.id));
 });
 
+test("withCurrentTeams: a traded player takes Sleeper's team, others are left as is", () => {
+  const pool = [
+    { id: "a", name: "Traded Guy", team: "ARI", position: "WR" },
+    { id: "b", name: "Stays Put", team: "DET", position: "RB" },
+    { id: "c", name: "To Washington", team: "NYG", position: "TE" },
+    { id: "sl-9", name: "Extra Guy", team: "BUF", position: "WR", extra: true },
+  ];
+  const sleeper = {
+    1: { name: "Traded Guy", position: "WR", team: "HOU" },
+    2: { name: "Stays Put", position: "RB", team: "DET" },
+    3: { name: "To Washington", position: "TE", team: "WAS" },
+    9: { name: "Extra Guy", position: "WR", team: "MIA" },
+  };
+  const out = app.withCurrentTeams(pool, sleeper, app.nflIdResolver(sleeper));
+  assert.deepEqual(plain(out.map((p) => p.team)), ["HOU", "DET", "WSH", "BUF"]);
+  assert.equal(out[1], pool[1]);
+  // Nothing loaded yet, or nothing changed: the same array back.
+  assert.equal(app.withCurrentTeams(pool, {}, app.nflIdResolver({})), pool);
+  assert.equal(app.withCurrentTeams([pool[1]], sleeper, app.nflIdResolver(sleeper))[0], pool[1]);
+});
+
 test("SEASON_ENDING_INJURY reads Sleeper's injury text", () => {
   for (const t of ["Knee - ACL", "Torn ACL", "Achilles"]) assert.ok(app.SEASON_ENDING_INJURY.test(t), t);
   for (const t of ["Hamstring", "Knee - MCL", "Placement"]) assert.ok(!app.SEASON_ENDING_INJURY.test(t), t);

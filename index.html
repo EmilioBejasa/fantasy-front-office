@@ -449,7 +449,7 @@ const samplePlayers = [
   { id: "price-j", name: "Jadarian Price", team: "SEA", position: "RB" },
   { id: "watson-c", name: "Christian Watson", team: "GB", position: "WR" },
   { id: "washington-p", name: "Parker Washington", team: "JAX", position: "WR" },
-  { id: "harrison", name: "Marvin Harrison Jr.", team: "ARI", position: "WR" },
+  { id: "harrison", name: "Marvin Harrison Jr.", team: "HOU", position: "WR" },
   { id: "fannin", name: "Harold Fannin Jr.", team: "CLE", position: "TE" },
   { id: "laporta", name: "Sam LaPorta", team: "DET", position: "TE" },
   { id: "pitts", name: "Kyle Pitts Sr.", team: "ATL", position: "TE" },
@@ -573,7 +573,7 @@ const samplePlayers = [
   { id: "washington-malik", name: "Malik Washington", team: "MIA", position: "WR" },
   { id: "antonio-williams", name: "Antonio Williams", team: "WSH", position: "WR" },
   { id: "harris-tre", name: "Tre Harris", team: "LAC", position: "WR" },
-  { id: "kaytron-allen", name: "Kaytron Allen", team: "WSH", position: "RB" },
+  { id: "kaytron-allen", name: "Kaytron Allen", team: "MIA", position: "RB" },
   { id: "barner", name: "AJ Barner", team: "SEA", position: "TE" },
   { id: "flournoy", name: "Ryan Flournoy", team: "DAL", position: "WR" },
   { id: "young-bryce", name: "Bryce Young", team: "CAR", position: "QB" },
@@ -602,10 +602,10 @@ const samplePlayers = [
 // existed for it. This isn't split by week; it's a single always-current
 // list — replace it wholesale with the latest real targets as the season
 // moves on, rather than piling up a new dated list every week.
-const WAIVER_TARGETS_UPDATED_ON = "2026-10-20";
+const WAIVER_TARGETS_UPDATED_ON = "2026-10-27";
 // The week these are pickups for. The page warns once Sleeper's current week
 // moves past it, so a list that hasn't been rebuilt doesn't pass as current.
-const WAIVER_TARGETS_WEEK = 7;
+const WAIVER_TARGETS_WEEK = 8;
 const WAIVER_PRIORITIES = ["Must Add", "Speculative", "Streamer", "Deep League"];
 const WAIVER_PRIORITY_COLOR = {
   "Must Add": "var(--series-red)",
@@ -613,53 +613,46 @@ const WAIVER_PRIORITY_COLOR = {
   "Streamer": "var(--series-blue)",
   "Deep League": "var(--text-muted)",
 };
-// Current as of Week 6's results and injury news (2026-10-20): real pickups
-// for Week 7 that Week 3-6 usage, Sleeper's injury designations (Davante
-// Adams out 6-10 weeks; Pittman, Doubs, Shipley and Bigsby on IR; Barkley,
-// Monangai and Bateman out; Hurts done for the season) and Sleeper's
-// most-added list point to. BUF, JAX, LAC and WSH are on bye in Week 7, so
-// none of their players are here.
+// Current as of Week 7's results and injury news (2026-10-27): pickups for
+// Week 8 that Week 4-7 usage, Sleeper's injury designations (Breece Hall,
+// Lamar Jackson, DeVonta Smith, Jeremiyah Love, Emeka Egbuka and Zach
+// Charbonnet out; Jadarian Price on IR) and Sleeper's most-added list point
+// to. HOU, NO, NYG and SF are on bye in Week 8, so none of their players are here.
 const WAIVER_TARGETS = [
-  { id: "cooper-omar", name: "Omar Cooper Jr.", team: "NYJ", position: "WR", priority: "Must Add",
-    note: "Back from IR (ankle) in Week 6 with 6 catches, 103 yards and a TD on 7 targets, playing 82% of snaps. By far the most-added player on Sleeper." },
-  { id: "germie-bernard", name: "Germie Bernard", team: "PIT", position: "WR", priority: "Must Add",
-    note: "Michael Pittman is on IR — Bernard has played 92%+ of snaps two weeks running, with 9 and then 12 targets (25.7 points in Week 6)." },
-  { id: "sl-8129", name: "Dameon Pierce", team: "PHI", position: "RB", priority: "Must Add",
-    note: "Barkley is out (hamstring) and Bigsby and Shipley are both on IR — Pierce played 95% of snaps in Week 6 with 12 carries and 5 targets (15.0 points)." },
-  { id: "sl-12718", name: "Konata Mumpfield", team: "LAR", position: "WR", priority: "Must Add",
-    note: "Davante Adams is out 6-10 weeks (hamstring). Mumpfield played 63-70% of snaps when Nacua missed time earlier and is the likeliest to take Adams' snaps." },
-  { id: "charbonnet", name: "Zach Charbonnet", team: "SEA", position: "RB", priority: "Speculative",
-    note: "Seattle has to activate him from PUP by Thursday (Oct. 22), and he has a good chance to debut against KC. Emanuel Wilson's role has shrunk (32% of snaps in Week 6)." },
-  { id: "sl-10235", name: "Roschon Johnson", team: "CHI", position: "RB", priority: "Speculative",
-    note: "Monangai (turf toe) is week-to-week but staying off IR — Johnson had 13 carries in Week 6 (14.5 points) behind Swift." },
-  { id: "sl-9757", name: "Kendre Miller", team: "NO", position: "RB", priority: "Speculative",
-    note: "20 carries in Week 6 on 44% of snaps, with Etienne on IR and Kamara listed questionable." },
-  { id: "washington-mike", name: "Mike Washington Jr.", team: "LV", position: "RB", priority: "Speculative",
-    note: "9 carries for 43 yards in Week 6, nearly matching Jeanty's 10, after ankle trouble early in the season. A handcuff who's eating into the starter's work." },
-  { id: "jaylin-noel", name: "Jaylin Noel", team: "HOU", position: "WR", priority: "Speculative",
-    note: "15.2 and 20.7 points the last two weeks with Jayden Higgins and Tank Dell both on IR, on about half the snaps." },
-  { id: "tucker-tre", name: "Tre Tucker", team: "LV", position: "WR", priority: "Speculative",
-    note: "26.7 points on 7 targets in Week 6, after three straight weeks of 7.5-8.4 points. He's played 57-75% of snaps in Weeks 3-6." },
-  { id: "sl-3271", name: "Tyler Higbee", team: "LAR", position: "TE", priority: "Speculative",
-    note: "Terrance Ferguson is on IR and Adams is out — Higbee played 83% of snaps in Week 6, with 27 targets across Weeks 3-6." },
-  { id: "sl-96", name: "Aaron Rodgers", team: "PIT", position: "QB", priority: "Streamer",
-    note: "17+ points in each of the last four games (23.7, 24.0, 22.0, 17.0), and he led an overtime win over Tampa Bay in Week 6." },
-  { id: "stroud", name: "C.J. Stroud", team: "HOU", position: "QB", priority: "Streamer",
-    note: "20+ points three weeks running, including 312 yards in Week 6 (24.0 points)." },
-  { id: "sl-9230", name: "Tanner McKee", team: "PHI", position: "QB", priority: "Streamer",
-    note: "Philadelphia's starter for the rest of the season with Hurts out (blood clots) — 215 yards in his first start (12.6 points). A superflex add more than a 1QB one." },
-  { id: "pitts", name: "Kyle Pitts Sr.", team: "ATL", position: "TE", priority: "Streamer",
-    note: "15.2 and 23.0 points the last two weeks on 13 targets, playing 78% of snaps in Week 6." },
-  { id: "sl-9482", name: "Michael Mayer", team: "LV", position: "TE", priority: "Streamer",
-    note: "9 targets and 16.5 points in Week 6 on 79% of snaps, after 10 targets in Week 4 — an every-down tight end." },
+  { id: "caleb-douglas", name: "Caleb Douglas", team: "MIA", position: "WR", priority: "Must Add",
+    note: "Back in Week 7 after missing Weeks 3-6, with 21.0 points on 68% of snaps. By far the most-added player on Sleeper." },
+  { id: "concepcion", name: "KC Concepcion Jr.", team: "CLE", position: "WR", priority: "Must Add",
+    note: "23.2 points on 10 targets in Week 7, playing 79% of snaps. He's drawn 6+ targets in three of the last four games." },
+  { id: "lemon", name: "Makai Lemon", team: "PHI", position: "WR", priority: "Must Add",
+    note: "DeVonta Smith is out (hamstring). Lemon played 91% of snaps in Week 7, with 8 targets and 19.7 points, and has 74%+ of snaps every week since Week 4." },
+  { id: "sl-11435", name: "Emanuel Wilson", team: "SEA", position: "RB", priority: "Must Add",
+    note: "Charbonnet is out (ACL) and Jadarian Price is on IR. Wilson had 24 carries and 18.5 points in Week 7, and 20+ carries in two of the last three games." },
+  { id: "tucker-tre", name: "Tre Tucker", team: "LV", position: "WR", priority: "Must Add",
+    note: "12 targets and 21.3 points in Week 7 on 82% of snaps, after 26.7 points the week before. Two straight weeks as a WR1." },
+  { id: "coleman-jonah", name: "Jonah Coleman", team: "DEN", position: "RB", priority: "Speculative",
+    note: "Back from IR in Week 7 with 9 carries and 8.9 points on 49% of snaps. A rookie splitting work, with room to grow." },
+  { id: "sl-8122", name: "Zonovan Knight", team: "ARI", position: "RB", priority: "Speculative",
+    note: "Jeremiyah Love is out (ankle). Knight has played 44-53% of snaps the last two weeks, with 15 carries in Week 6 and 5 targets in Week 7." },
+  { id: "sampson-dylan", name: "Dylan Sampson", team: "CLE", position: "RB", priority: "Speculative",
+    note: "Back from IR in Week 7 with 10.7 points on 46% of snaps, behind Judkins' 17 carries. A handcuff with a real role." },
+  { id: "sl-7083", name: "Tyler Huntley", team: "BAL", position: "QB", priority: "Streamer",
+    note: "Starting with Lamar Jackson out (ankle): 24.0, 13.4 and 16.1 points in his last three starts, with 3-6 rushes a game. At BUF in Week 8." },
+  { id: "sl-1166", name: "Kirk Cousins", team: "LV", position: "QB", priority: "Streamer",
+    note: "19.5+ points in three of the last four games (23.6, 13.7, 19.5, 20.4). At NYJ in Week 8." },
+  { id: "willis-malik", name: "Malik Willis", team: "MIA", position: "QB", priority: "Streamer",
+    note: "26.0 points in Week 7 and 20.9 in Week 5, with 8 rushes in each. Hosts NE in Week 8." },
   { id: "henry-hunter", name: "Hunter Henry", team: "NE", position: "TE", priority: "Streamer",
-    note: "Romeo Doubs just went on IR, taking another target away from New England's receivers — Henry has scored 13.4 and 14.8 points the last two weeks." },
+    note: "11+ points four weeks running (11.2, 13.4, 14.8, 14.1) on 64-76% of snaps." },
+  { id: "pitts", name: "Kyle Pitts Sr.", team: "ATL", position: "TE", priority: "Streamer",
+    note: "13.2, 23.0 and 15.2 points the last three weeks on 5-7 targets a game. At TB in Week 8." },
+  { id: "sl-12498", name: "Mason Taylor", team: "NYJ", position: "TE", priority: "Streamer",
+    note: "25.2 points in Week 7 and 6 targets in each of the last two games, on 55-63% of snaps. Hosts LV." },
   { id: "flournoy", name: "Ryan Flournoy", team: "DAL", position: "WR", priority: "Deep League",
-    note: "9 targets on 87% of snaps in Week 6 (17.0 points), and 12.0 points the week before." },
-  { id: "sl-4454", name: "Kendrick Bourne", team: "ARI", position: "WR", priority: "Deep League",
-    note: "8 targets in each of the last two games in a pass-heavy offense." },
-  { id: "lane-jakobi", name: "Ja'Kobi Lane", team: "BAL", position: "WR", priority: "Deep League",
-    note: "Rashod Bateman is out (shoulder) — Lane played 54% of snaps with 5 targets in his first game back from IR." },
+    note: "68-87% of snaps every week since Week 4, with 11.0+ points in three of them." },
+  { id: "sl-12485", name: "Tez Johnson", team: "TB", position: "WR", priority: "Deep League",
+    note: "Emeka Egbuka is out (concussion). Johnson's snaps jumped to 65% in Week 7 (12.7 points)." },
+  { id: "sl-13150", name: "Darius Cooper", team: "PHI", position: "WR", priority: "Deep League",
+    note: "92% of snaps in Week 7 with Smith out, though only 3 targets. 18.3 and 15.1 points in Weeks 4-5." },
 ];
 
 /* ---------------- weekly scores ---------------- */
@@ -773,6 +766,22 @@ function mergeInjuredList({ pool, scores, sleeperPlayers, resolve }) {
     });
   }
   return [...kept, ...auto];
+}
+
+// samplePlayers is hand-kept, so a traded player keeps his old team there
+// until someone edits it; Sleeper's list (re-baked every few hours) already
+// has the new one. Extras come from this season's stat rows and are current.
+function withCurrentTeams(pool, sleeperPlayers, resolve) {
+  if (Object.keys(sleeperPlayers).length === 0 || !window.SleeperScores) return pool;
+  let changed = false;
+  const out = pool.map((p) => {
+    const sp = !p.extra && sleeperPlayers[resolve(p.id, p.name, p.position)];
+    const team = sp && window.SleeperScores.normalizeTeam(sp.team);
+    if (!team || team === p.team) return p;
+    changed = true;
+    return { ...p, team };
+  });
+  return changed ? out : pool;
 }
 
 // Earliest game a player can come back for: the first team game after the
@@ -8304,11 +8313,14 @@ function App() {
   const dynasty = useDynastyValues(settings);
   const sleeperPlayers = useSleeperStatuses(true);
   const resolveNflId = useMemo(() => nflIdResolver(sleeperPlayers), [sleeperPlayers]);
-  // The scores, with the IR list kept current from Sleeper (it drives the IR cells too).
+  // The scores, with teams and the IR list kept current from Sleeper (the IR
+  // list drives the IR cells too).
   const liveScores = useMemo(() => {
-    const injured = mergeInjuredList({ pool: rawScores.players, scores: rawScores.scores, sleeperPlayers, resolve: resolveNflId });
-    return { ...rawScores, injured, injuredById: Object.fromEntries(injured.map((r) => [r.id, r])) };
+    const pool = withCurrentTeams(rawScores.players, sleeperPlayers, resolveNflId);
+    const injured = mergeInjuredList({ pool, scores: rawScores.scores, sleeperPlayers, resolve: resolveNflId });
+    return { ...rawScores, players: pool, injured, injuredById: Object.fromEntries(injured.map((r) => [r.id, r])) };
   }, [rawScores, sleeperPlayers, resolveNflId]);
+  const currentPlayers = useMemo(() => withCurrentTeams(players, sleeperPlayers, resolveNflId), [players, sleeperPlayers, resolveNflId]);
   // The 2027 class is about rookie picks, which only exist in dynasty values,
   // so in redraft mode it loads the dynasty set separately.
   const classSettings = useMemo(() => ({ ...settings, mode: "dynasty", tep: 0 }), [settings]);
@@ -8347,7 +8359,7 @@ function App() {
         {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} sport={sport} setSport={setSport} />}
         {page === "weekly" && <WeeklyScores players={liveScores.players} data={liveScores} />}
         {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} />}
-        {page === "injuries" && <InjuredReserve players={players} reportPlayers={liveScores.players} data={liveScores} />}
+        {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
         {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}
         {page === "dynasty" && <DynastyValues data={dynasty} settings={settings} setSettings={setSettings} />}

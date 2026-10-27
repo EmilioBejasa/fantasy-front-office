@@ -837,7 +837,7 @@ removed on 2026-10-26.
 
 ## Tests
 
-`node --test "tests/*.test.js"` (Node 18+, with esbuild installed:
+`node --test "tests/*.test.js"` (Node 21+, for the glob; with esbuild installed:
 `npm install --no-save --no-package-lock esbuild@0.24.0`). `tests/load-app.js`
 compiles `index.html`'s app script and runs it in a Node sandbox with a stub
 browser and a React that never renders, so the tests call the page's own

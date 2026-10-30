@@ -122,3 +122,46 @@ test("the dynasty snapshot's fields match its rows", () => {
     for (const r of snap[qb]) assert.equal(r.length, snap.fields.length);
   }
 });
+
+test("espn-college: seasons, games, team shares and breakout", () => {
+  const E = require("../scripts/lib/espn-college");
+  const seasons = E.parseSeasons({
+    teams: { "ohio-state-buckeyes": { id: "194", shortDisplayName: "Ohio State" } },
+    categories: [
+      { name: "receiving", names: ["receptions", "receivingYards", "yardsPerReception", "receivingTouchdowns"],
+        statistics: [
+          { season: { year: 2025 }, teamSlug: "ohio-state-buckeyes", stats: ["87", "1,243", "14.3", "12"] },
+          { season: { year: 2024 }, teamSlug: "ohio-state-buckeyes", stats: ["20", "200", "10.0", "1"] },
+        ] },
+      { name: "defensive", names: ["totalTackles"], statistics: [{ season: { year: 2025 }, teamSlug: "ohio-state-buckeyes", stats: ["1"] }] },
+    ],
+  });
+  assert.deepEqual(seasons.map((s) => [s.year, s.team, s.rec, s.recYds, s.recTd]), [[2024, "Ohio State", 20, 200, 1], [2025, "Ohio State", 87, 1243, 12]]);
+  assert.equal(seasons[1].totalTackles, undefined);
+
+  const log = E.parseGamelog({
+    names: ["passingYards", "adjQBR"], events: { a: {}, b: {}, c: {} },
+    seasonTypes: [{ displayName: "2025 Postseason", categories: [{ totals: ["300", "50.0"] }] }, { displayName: "2025 Regular Season", categories: [{ totals: ["3,000", "78.0"] }] }],
+  });
+  assert.deepEqual(log, { g: 3, qbr: 78 });
+
+  const team = E.parseTeamTotals({ results: { stats: { categories: [
+    { name: "receiving", stats: [{ name: "receivingYards", value: 3755 }, { name: "receivingTouchdowns", value: 33 }] },
+    { name: "rushing", stats: [{ name: "rushingYards", value: 2161 }, { name: "totalYards", value: 5916 }] },
+    { name: "general", stats: [{ name: "gamesPlayed", value: 14 }] },
+  ] } } });
+  const sh = E.shares(seasons[1], team);
+  assert.equal(sh.recYds, 33.1);
+  assert.equal(sh.recTd, 36.4);
+  assert.equal(sh.dominator, 34.8);
+  assert.equal(sh.rushYds, null);
+  assert.equal(E.breakoutYear([{ year: 2024, shares: { dominator: 12 } }, { year: 2025, shares: sh }]), 2025);
+});
+
+test("prospects-2027.js has every CLASS_2027 espnId", () => {
+  const src = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const ids = [...src.matchAll(/espnId: "(\d+)"/g)].map((m) => m[1]);
+  const sandbox = { window: {} };
+  require("vm").runInNewContext(fs.readFileSync(path.join(ROOT, "data/prospects-2027.js"), "utf8"), sandbox);
+  for (const id of ids) assert.ok(sandbox.window.PROSPECTS_2027.players[id], `no college stats for espnId ${id}`);
+});

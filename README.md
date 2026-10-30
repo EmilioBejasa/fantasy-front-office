@@ -643,6 +643,25 @@ worth right now, and the player with the closest value. Each prospect also
 shows the pick his rank lines up with in a 12-team league (ranks 1-4 early
 1st, 5-8 mid, 9-12 late, and so on) at its current value.
 
+**College production.** Each `CLASS_2027` entry carries its ESPN athlete id
+(`espnId`), and `scripts/refresh-prospects.js` (every Sunday, by
+`.github/workflows/refresh-prospects.yml`) writes every prospect's college
+seasons to `data/prospects-2027.js` from ESPN's keyless college football API
+(`scripts/lib/espn-college.js` lists the endpoints). Season totals include
+the postseason, and each season is compared with the player's own team's
+totals that year. The table's Production column shows the latest season, and
+each name opens a prospect page at `#/prospect/<espnId>` (`ProspectProfile`):
+rookie ranks and the projected pick, this season's national ranks, the
+underlying metrics, and every college season. The metrics are, for WR/TE, the
+dominator rating (average of his share of team receiving yards and TDs),
+yards share, yards per catch and breakout season (the first at a 20%+
+dominator); for RB, rushing-yards share, scrimmage-yards share of the team's
+total yards, yards per carry and scrimmage yards per game; for QB, completion
+%, yards per attempt, TD:INT and ESPN's adjusted QBR (regular season).
+Adding a prospect means finding their ESPN id (the number in their
+espn.com/college-football/player URL) and re-running the script. ESPN's
+college data has no birthdates, so breakout age isn't shown.
+
 ### Consensus across calculators
 
 Under the trade verdict (which uses KTC, like the rest of the app), the
@@ -817,7 +836,7 @@ log, season averages and similar players. Headshots come from
 tab link to their profile, and the profile's back link returns to the tab you
 came from. Football tabs that use this app's short ids (Weekly Scores, Waiver
 Wire, Injuries) are matched to Sleeper ids by name and position, the same way
-the live scores are. Rookie picks and 2027 prospects have no profile.
+the live scores are. Rookie picks have no profile; 2027 prospects have their own (see "2027 Class").
 
 ## The shared player pool
 

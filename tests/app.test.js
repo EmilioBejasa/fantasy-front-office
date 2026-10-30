@@ -240,3 +240,12 @@ test("diffStatuses: a designation change is an alert, a first sighting isn't", (
   assert.equal(app.alertStatusLabel(null), "Active");
   assert.equal(app.alertStatusLabel("GTD"), "Game-time decision");
 });
+
+test("prospectHeadline: one line per position, and prospect pages route", () => {
+  const wr = { year: 2026, g: 7, rec: 52, recYds: 984, recTd: 12, shares: { dominator: 49 } };
+  assert.deepEqual(plain(app.prospectHeadline("WR", wr)), { line: "52-984-12", sub: "49% dominator", season: "2026 · 7 G" });
+  const qb = { year: 2026, g: 7, passYds: 2151, passTd: 22, int: 1, qbr: 89.8 };
+  assert.equal(app.prospectHeadline("QB", qb).line, "2,151 yds, 22 TD, 1 INT");
+  assert.equal(app.prospectHeadline("RB", { year: 2026, car: 135, rushYds: 763, rushTd: 13 }).sub, null);
+  assert.equal(app.pageFromHash("#/prospect/5079720"), "prospect");
+});

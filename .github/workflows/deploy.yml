@@ -8,7 +8,7 @@ on:
   push:
     branches: [master]
   workflow_run:
-    workflows: [Refresh scores, Refresh NBA, Refresh players, Refresh market values, Refresh dynasty values]
+    workflows: [Refresh scores, Refresh NBA, Refresh players, Refresh market values, Refresh dynasty values, Refresh prospects]
     types: [completed]
   workflow_dispatch:
 

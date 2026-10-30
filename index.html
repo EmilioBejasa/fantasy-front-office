@@ -2216,6 +2216,11 @@ function DynastyValues({ data, settings, setSettings }) {
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Dynasty Values</h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
           What every player{isDynasty && " and rookie pick"} is worth in a {describeSettings(settings)} league, by KeepTradeCut's crowdsourced values.
+          A higher number means more trade value, so use it to size up players against each other.
+        </p>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+          Want to see where they'd go in a draft? The <a href={PAGE_BY_KEY.draftboard.hash} className="underline">War Room</a> lays
+          out these same values as a {isDynasty ? "startup " : ""}draft board.
         </p>
         <AboutData>
           <DynastyStatusLine data={data} />{" "}
@@ -2417,8 +2422,13 @@ function DraftBoard({ data, settings, setSettings }) {
       <header>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Draft Board</h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          A {describeSettings(settings)}{isDynasty ? " startup" : ""} draft if every team took the most valuable player
-          left: 1.01 is the top player on the Value Board, and so on down.
+          A mock {describeSettings(settings)}{isDynasty ? " startup" : ""} draft built from
+          the <a href={PAGE_BY_KEY.dynasty.hash} className="underline">Value Board</a>'s numbers: every team takes the most
+          valuable player left, so 1.01 is the Value Board's No. 1, 1.02 its No. 2, and so on down.
+        </p>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+          Use it to see which round a player is worth{isDynasty ? " in a startup" : ""} and to plan your picks. It's what
+          the values say, not real drafts or ADP.
         </p>
         <AboutData>
           <DynastyStatusLine data={data} /> {isDynasty
@@ -7809,9 +7819,9 @@ const PAGES = [
   { key: "leagues", sport: "nfl", label: "My Leagues", short: "Boardroom", hash: "#/leagues", group: "Dynasty",
     blurb: "Your Sleeper leagues, each valued with its own settings and lineup, as dynasty or redraft: power rankings and where your team stands." },
   { key: "dynasty", sport: "nfl", label: "Dynasty Values", short: "Value Board", hash: "#/values", group: "Dynasty",
-    blurb: "Trade values for every player and rookie pick, set to your league's format, size, scoring and TE premium." },
+    blurb: "Look up what any player or rookie pick is worth in a trade, set to your league's format, size, scoring and TE premium." },
   { key: "draftboard", sport: "nfl", label: "Draft Board", short: "War Room", hash: "#/draftboard", group: "Dynasty",
-    blurb: "A Sleeper-style draft board filled in by current value: 1.01 is the most valuable player in your format." },
+    blurb: "Plan a startup draft: the Value Board's values laid out as a draft grid, so 1.01 is the most valuable player in your format." },
   { key: "player", sport: "nfl", label: "Player Profile", short: "Player File", hash: "#/player/", hidden: true },
   { key: "trade", sport: "nfl", label: "Trade Calculator", short: "Trade Desk", hash: "#/trade", group: "Dynasty",
     blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, plus every team in your Sleeper league ranked." },

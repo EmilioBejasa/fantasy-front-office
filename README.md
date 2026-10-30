@@ -14,8 +14,8 @@ pick, as a mock draft board or a searchable list), a **Trade Calculator** (plus 
 value), and a **2027 Class** preview of next year's rookies.
 
 There's also a **basketball** side for season-long (redraft) points
-leagues, with eight rooms: Scoreboard, Waiver Desk, Training Room, Boardroom,
-Big Board, Analytics Dept., War Room and Trade Desk. See "Basketball" below. A Football | Basketball switch in
+leagues, with seven rooms: Scoreboard, Waiver Desk, Training Room, Boardroom,
+Big Board, War Room and Trade Desk. See "Basketball" below. A Football | Basketball switch in
 the header moves between the two sports.
 
 ## Running it
@@ -84,7 +84,6 @@ The page is laid out like a website, themed as an **executive front office**
   | War Room | Player Values (draft board and value list) |
   | Trade Desk | Trade Calculator |
   | Scouting Dept. | 2027 Rookie Class |
-  | Analytics Dept. | Projected Rankings (basketball) |
   | Player File | Player Profile (no nav entry; reached from player names) |
 
   Basketball reuses the football names for its matching rooms (Scoreboard,
@@ -119,7 +118,7 @@ The page is laid out like a website, themed as an **executive front office**
 - **Every page has its own URL**: `#/scores`, `#/waivers`, `#/injuries`,
   `#/rankings`, `#/leagues`, `#/draftboard` (`#/values` opens its value list),  `#/trade`, `#/2027`, and for
   basketball `#/nba/scores`, `#/nba/waivers`, `#/nba/injuries`, `#/nba/leagues`,
-  `#/nba/rankings`, `#/nba/projections`, `#/nba/draftboard`, `#/nba/trade`. So the
+  `#/nba/rankings`, `#/nba/draftboard`, `#/nba/trade`. So the
   back button, bookmarks and reloads all work. A trade link (`#trade=…`, or
   `#nbatrade=…` for basketball) opens that Trade Desk with the trade, and
   leaving and coming back keeps it.

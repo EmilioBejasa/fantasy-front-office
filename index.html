@@ -6626,161 +6626,6 @@ function NbaLeagues({ data }) {
   );
 }
 
-function useNbaProjections(data, enabled) {
-  const season = data.state?.season;
-  const [state, setState] = useState({ status: "loading", rows: [] });
-  const tick = useRefreshTick();
-  useEffect(() => {
-    if (!enabled || !season) return;
-    let cancelled = false;
-    nbaCached(`proj-${season}`, 6 * 60 * 60 * 1000, async () =>
-      (await window.SleeperNBA.fetchProjections(season)).filter((r) => data.players[r.id]))
-      .then((rows) => { if (!cancelled) setState({ status: "live", rows }); })
-      // A failed background refresh keeps the last list up.
-      .catch((err) => { if (!cancelled) setState((s) => (s.rows.length ? s : { status: "error", message: err.message, rows: [] })); });
-    return () => { cancelled = true; };
-  }, [season, enabled, tick]);
-  return state;
-}
-
-const NBA_PROJ_SORTS = {
-  total: (a, b) => b.total - a.total,
-  fpg: (a, b) => b.fpg - a.fpg,
-  adp: (a, b) => (a.adp ?? 999) - (b.adp ?? 999),
-};
-
-function NbaProjections({ data, settings, setSettings }) {
-  const proj = useNbaProjections(data, true);
-  const [pos, setPos] = useState("ALL");
-  const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState("total");
-  const scoringLabel = settings.scoring === "espn" ? "ESPN" : "Standard";
-  const season = data.state.season;
-  // Compare against this season's real FPG once games are played, else last season's.
-  const cmpSeason = data.currentHasGames ? season : data.state.previous_season;
-
-  const { rows: valueRows, gamesLeft } = useMemo(() => nbaTradeRows(data, settings.scoring), [data, settings.scoring]);
-  const ranked = useMemo(() => {
-    const avail = Object.fromEntries(valueRows.map((r) => [r.id, r.avail]));
-    const cmp = Object.fromEntries((data.seasons[cmpSeason] || []).map((p) => [p.id, p]));
-    return proj.rows
-      .map((p) => {
-        const fpg = nbaPoints(p.stats, settings.scoring);
-        const games = Math.round(gamesLeft * (avail[p.id] ?? 0.8));
-        const now = data.players[p.id];
-        return {
-          ...p, position: now?.position || p.position, positions: now?.positions || p.positions, team: now?.team || p.team,
-          fpg, games, total: fpg * games, lastFpg: cmp[p.id] ? nbaFpg(cmp[p.id], settings.scoring) : null,
-        };
-      })
-      .sort(NBA_PROJ_SORTS.total)
-      .map((r, i) => ({ ...r, projRank: i + 1 }));
-  }, [proj.rows, valueRows, gamesLeft, data, cmpSeason, settings.scoring]);
-
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return ranked
-      .filter((r) => nbaPosMatch(r, pos))
-      .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.team || "").toLowerCase() === q)
-      .sort(NBA_PROJ_SORTS[sortBy]);
-  }, [ranked, pos, query, sortBy]);
-
-  const th = (label, align = "right") => (
-    <th className={`text-${align} px-3 py-2 text-xs font-semibold sticky top-0 z-10`} style={{ color: "var(--text-muted)" }}>{label}</th>
-  );
-
-  return (
-    <div className="flex flex-col gap-5">
-      <NbaPageHeader title="Projected Rankings"
-        lead={`Every player ranked by projected ${nbaSeasonLabel(season)} fantasy points in ${scoringLabel} scoring, with Sleeper's ADP to spot bargains.`}>
-        Projections are Sleeper's per-game stat lines for the {nbaSeasonLabel(season)} season, scored in your league's
-        settings. Projected points = projected FPG × the {gamesLeft} team games left × how often he's played (games played ÷
-        team games, 50-100%, from this season once he's played 10 games, otherwise last season; 80% for players without
-        NBA games). <strong>vs ADP</strong> compares his projected rank with where he goes in Sleeper drafts: green means
-        he's projected to outscore his draft spot. {NBA_SCORING_NOTE[settings.scoring]}
-      </NbaPageHeader>
-
-      <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-        <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
-            onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
-        </LabeledControl>
-        <LabeledControl label="Position">
-          <PillGroup options={NBA_POSITION_OPTIONS} value={pos} onChange={setPos} />
-        </LabeledControl>
-        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search player or team" aria-label="Search player or team"
-          className="rounded-md border px-3 py-1.5 text-sm w-full sm:w-56 sm:ml-auto" style={inputStyle} />
-      </div>
-
-      {proj.status === "error" ? (
-        <div className="rounded-lg border p-8 text-center text-sm" style={{ borderColor: "var(--border)", background: "var(--surface-1)", color: "var(--text-muted)" }}>
-          Couldn't load projections from Sleeper ({proj.message}).
-        </div>
-      ) : (
-        <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "75vh" }}>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                {th("RK")}{th("Player", "left")}{th("Pos", "left")}
-                <SortHeader label="Proj Pts" active={sortBy === "total"} onClick={() => setSortBy("total")} />
-                <SortHeader label="Proj FPG" active={sortBy === "fpg"} onClick={() => setSortBy("fpg")} />
-                {th("Games")}
-                {th(`${nbaSeasonLabel(cmpSeason)} FPG`)}
-                <SortHeader label="ADP" active={sortBy === "adp"} onClick={() => setSortBy("adp")} />
-                {th("vs ADP")}
-                {NBA_PER_GAME.map(([, h]) => <th key={h} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10" style={{ color: "var(--text-muted)" }}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {proj.status === "loading" && (
-                <tr><td colSpan={16} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading projections from Sleeper…</td></tr>
-              )}
-              {proj.status === "live" && rows.length === 0 && (
-                <tr><td colSpan={16} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No matches.</td></tr>
-              )}
-              {rows.map((r, i) => {
-                const diff = r.adp != null ? Math.round(r.adp) - r.projRank : null;
-                const change = r.lastFpg != null ? r.fpg - r.lastFpg : null;
-                return (
-                  <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{i + 1}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <PlayerLink sport="nba" id={r.id}>{r.name}</PlayerLink>{" "}
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team}</span>
-                      <NbaInjuryTag status={data.players[r.id]?.status} />
-                    </td>
-                    <td className="px-3 py-1.5"><PosBadge pos={r.position} /></td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{Math.round(r.total).toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-primary)" }}>{fmt1(r.fpg)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.games}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
-                      {r.lastFpg != null ? fmt1(r.lastFpg) : "–"}
-                      {change != null && Math.abs(change) >= 0.5 && (
-                        <span className="text-xs ml-1" style={{ color: change > 0 ? "var(--trend-up)" : "var(--series-red)" }}
-                          title={`Projected ${change > 0 ? "up" : "down"} ${fmt1(Math.abs(change))} FPG`}>
-                          {change > 0 ? "▲" : "▼"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.adp != null ? fmt1(r.adp) : "–"}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-xs"
-                      style={{ color: diff == null || Math.abs(diff) < 5 ? "var(--text-muted)" : diff > 0 ? "var(--trend-up)" : "var(--series-red)" }}>
-                      {diff == null ? "–" : diff > 0 ? `+${diff}` : diff}
-                    </td>
-                    {NBA_PER_GAME.map(([k]) => (
-                      <td key={k} className="px-2 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmt1(r.stats[k] || 0)}</td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Draft board: the same Sleeper-style board as football, ranked by the Trade
 // Analyzer's values (projected rest-of-season fantasy points), so 1.01 is the
 // player expected to score the most from here on.
@@ -7829,8 +7674,6 @@ const PAGES = [
     blurb: "Your Sleeper league: this week's matchup with live win odds, the standings, and every team ranked by rest-of-season value." },
   { key: "nba-rankings", sport: "nba", label: "Player Rankings", short: "Big Board", hash: "#/nba/rankings", group: "Front office",
     blurb: "Every player ranked by fantasy points per game in your league's scoring, with per-game stats." },
-  { key: "nba-projections", sport: "nba", label: "Projected Rankings", short: "Analytics Dept.", hash: "#/nba/projections", group: "Front office",
-    blurb: "Every player ranked by Sleeper's season projections in your scoring, with ADP to spot bargains." },
   { key: "nba-draftboard", sport: "nba", label: "Draft Board", short: "War Room", hash: "#/nba/draftboard", group: "Front office",
     blurb: "A Sleeper-style draft board filled in by projected rest-of-season fantasy points." },
   { key: "nba-player", sport: "nba", label: "Player Profile", short: "Player File", hash: "#/nba/player/", hidden: true },
@@ -7875,7 +7718,6 @@ const PAGE_STYLE = {
   "nba-injuries": { hue: "var(--hue-red)", icon: PAGE_ICONS.injuries },
   "nba-leagues": { hue: "var(--hue-yellow)", icon: PAGE_ICONS.leagues },
   "nba-rankings": { hue: "var(--hue-violet)", icon: PAGE_ICONS.board },
-  "nba-projections": { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
   "nba-draftboard": { hue: "var(--hue-aqua)", icon: PAGE_ICONS.draft },
   "nba-player": { hue: "var(--hue-blue)", icon: PAGE_ICONS.profile },
   "nba-trade": { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
@@ -7895,6 +7737,7 @@ function pageFromHash(hash) {
   if (hash.startsWith(`${LEAGUES_HASH}/`)) return "leagues";
   if (hash.startsWith(`${NBA_LEAGUES_HASH}/`)) return "nba-leagues";
   if (hash === VALUE_LIST_HASH) return "draftboard"; // the War Room's value list (the old Value Board)
+  if (hash === "#/nba/projections") return "nba-rankings"; // the removed preseason-ADP rankings room
   return (PAGES.find((p) => p.hash === hash) || PAGE_BY_KEY.home).key;
 }
 
@@ -8664,7 +8507,6 @@ function App() {
             {page === "nba-injuries" && <NbaInjuries {...nbaProps} />}
             {page === "nba-leagues" && <NbaLeagues {...nbaProps} />}
             {page === "nba-rankings" && <NbaRankings {...nbaProps} />}
-            {page === "nba-projections" && <NbaProjections {...nbaProps} />}
             {page === "nba-draftboard" && <NbaDraftBoard {...nbaProps} />}
             {page === "nba-player" && <NbaProfile {...nbaProps} />}
             {page === "nba-trade" && <NbaTrade {...nbaProps} />}

@@ -9,8 +9,8 @@ A fantasy football companion. Three tabs cover this season, on one shared player
 **Waiver Wire Targets** (live Sleeper trending activity, live picks worked
 out from this season's usage, and a hand-picked pickup list), and **Injuries** (a live weekly injury report, plus who's out for the season or on IR/PUP,
 and the earliest week each player can return). Three more cover dynasty
-leagues: **Dynasty Values** (live trade values for every player and rookie
-pick), a **Trade Calculator** (plus every team in a Sleeper league ranked by
+leagues: **Player Values** (live trade values for every player and rookie
+pick, as a mock draft board or a searchable list), a **Trade Calculator** (plus every team in a Sleeper league ranked by
 value), and a **2027 Class** preview of next year's rookies.
 
 There's also a **basketball** side for season-long (redraft) points
@@ -81,8 +81,7 @@ The page is laid out like a website, themed as an **executive front office**
   | Training Room | Injuries |
   | Film Room | Weekly Rankings (and Start / Sit) |
   | Boardroom | My Leagues |
-  | Value Board | Dynasty Values |
-  | War Room | Draft Board |
+  | War Room | Player Values (draft board and value list) |
   | Trade Desk | Trade Calculator |
   | Scouting Dept. | 2027 Rookie Class |
   | Analytics Dept. | Projected Rankings (basketball) |
@@ -118,7 +117,7 @@ The page is laid out like a website, themed as an **executive front office**
   remembers the choice (`ff-valuediff:theme`). The choice is applied in
   `<head>` before render, so there's no flash.
 - **Every page has its own URL**: `#/scores`, `#/waivers`, `#/injuries`,
-  `#/rankings`, `#/leagues`, `#/values`, `#/draftboard`, `#/trade`, `#/2027`, and for
+  `#/rankings`, `#/leagues`, `#/draftboard` (`#/values` opens its value list),  `#/trade`, `#/2027`, and for
   basketball `#/nba/scores`, `#/nba/waivers`, `#/nba/injuries`, `#/nba/leagues`,
   `#/nba/rankings`, `#/nba/projections`, `#/nba/draftboard`, `#/nba/trade`. So the
   back button, bookmarks and reloads all work. A trade link (`#trade=…`, or
@@ -385,8 +384,8 @@ call for another injury.
 
 ## Dynasty tabs
 
-**Values default to KeepTradeCut.** Every football value in the app (Value
-Board, War Room, Trade Desk, league pages, profiles, home-page risers) is
+**Values default to KeepTradeCut.** Every football value in the app (War
+Room, Trade Desk, league pages, profiles, home-page risers) is
 KTC's (`applyMarketValues` in `useDynastyValues`), from the daily
 `data/market-values.js` (see "Consensus across calculators" below):
 
@@ -417,7 +416,7 @@ when you return to the tab and every 30 minutes. Players are
 keyed by their **Sleeper player_id**, which FantasyCalc includes, so nothing
 is matched by name.
 
-**League settings** sit at the top of Dynasty Values and the Trade
+**League settings** sit at the top of the War Room and the Trade
 Calculator. They're shared between the tabs and remembered in the browser
 (`DYNASTY_SETTINGS_KEY`):
 
@@ -446,9 +445,14 @@ it every Tuesday at 11:00 UTC and commits on change. It shares a
 concurrency group with the scores Action so the two never push over each
 other.
 
-### Dynasty Values
+### Player Values (War Room)
 
-Every player and pick, ranked by value for the selected league settings,
+One room, two views (`DraftBoard`, with a Draft board | Value list switch;
+the view is kept in the URL as `#/draftboard` or `#/values`). The **draft
+board** is a mock draft straight down the values: every team takes the most
+valuable player left, so 1.01 is the No. 1, snaking or linear, with rookie
+picks on or off in dynasty. The **value list** (`ValueList`, formerly its own
+Value Board tab) has every player and pick, ranked by value for the selected league settings,
 filterable by position (or Picks, in dynasty) and searchable by name or team. Each row shows position rank, age, value (with a
 bar relative to #1) and the 30-day trend. It also shows the player's live Sleeper
 injury designation, from the same cached `/players/nfl` map as the

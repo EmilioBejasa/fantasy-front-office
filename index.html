@@ -2187,7 +2187,9 @@ const WINDOW_COLOR = { "Win-now": "var(--hue-orange)", Future: "var(--hue-violet
 const DYNASTY_POSITIONS = [...POSITIONS.map((p) => ({ key: p, label: p })), { key: "PICK", label: "Picks" }];
 const DYNASTY_SORTS = { value: (a, b) => b.value - a.value, age: (a, b) => (a.age ?? 99) - (b.age ?? 99), trend: (a, b) => b.trend30 - a.trend30 };
 
-function DynastyValues({ data, settings, setSettings }) {
+// The War Room's "Value list" view: every player (and, in dynasty, rookie
+// pick) with its value, searchable and sortable by age and 30-day trend.
+function ValueList({ data, settings }) {
   const [pickedPosition, setPositionFilter] = useState("ALL");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("value");
@@ -2211,29 +2213,7 @@ function DynastyValues({ data, settings, setSettings }) {
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <header>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Dynasty Values</h2>
-        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          What every player{isDynasty && " and rookie pick"} is worth in a {describeSettings(settings)} league, by KeepTradeCut's crowdsourced values.
-          A higher number means more trade value, so use it to size up players against each other.
-        </p>
-        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          Want to see where they'd go in a draft? The <a href={PAGE_BY_KEY.draftboard.hash} className="underline">War Room</a> lays
-          out these same values as a {isDynasty ? "startup " : ""}draft board.
-        </p>
-        <AboutData>
-          <DynastyStatusLine data={data} />{" "}
-          {isDynasty && <>
-            <strong>Win-now</strong> marks players worth noticeably more this season than long term (good for a contender
-            to buy, a rebuilder to sell); <strong>Future</strong> marks young players whose value is mostly in later
-            seasons, including anyone out for the year.
-          </>}
-        </AboutData>
-      </header>
-
-      <LeagueSettings settings={settings} setSettings={setSettings} />
-
+    <>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <PillGroup options={isDynasty ? DYNASTY_POSITIONS : DYNASTY_POSITIONS.filter((p) => p.key !== "PICK")}
           value={positionFilter} onChange={setPositionFilter} />
@@ -2295,7 +2275,7 @@ function DynastyValues({ data, settings, setSettings }) {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -2390,10 +2370,13 @@ function BoardGrid({ sport, players, teams, roundChoices, defaultRounds, highlig
   );
 }
 
-// Football: the Value Board's values (KeepTradeCut by default) for the shared
-// league settings, so it updates whenever they do. Dynasty boards can mix in
+// Football's War Room: the dynasty (or redraft) values (KeepTradeCut by
+// default) for the shared league settings, as a draft board or a value list
+// (ValueList). #/values opens it on the list. Dynasty boards can mix in
 // rookie picks (on by default, with a toggle to leave them off). Dynasty
 // startups run deep, so dynasty boards go to 30 rounds.
+const WAR_ROOM_VIEWS = [{ key: "board", label: "Draft board" }, { key: "list", label: "Value list" }];
+const VALUE_LIST_HASH = "#/values";
 const BOARD_HIGHLIGHT_OPTIONS = ["ALL", "QB", "RB", "WR", "TE"].map((p) => ({ key: p, label: p }));
 const BOARD_PICK_HIGHLIGHT = { key: "PICK", label: "Picks" };
 const BOARD_PICKS_OPTIONS = [{ key: "on", label: "On" }, { key: "off", label: "Off" }];
@@ -2411,6 +2394,12 @@ function DraftBoard({ data, settings, setSettings }) {
   const isDynasty = settings.mode === "dynasty";
   const [picksSetting, setPicks] = useState("on");
   const withPicks = isDynasty && picksSetting === "on";
+  const [view, setView] = useState(() => (window.location.hash === VALUE_LIST_HASH ? "list" : "board"));
+  // Keep the view in the URL, so a link or refresh opens the same one.
+  useEffect(() => {
+    const target = view === "list" ? VALUE_LIST_HASH : PAGE_BY_KEY.draftboard.hash;
+    if (window.location.hash !== target) try { window.history.replaceState(null, "", target); } catch (e) {}
+  }, [view]);
   const players = useMemo(
     () => [...data.rows.filter((r) => r.position !== "PICK"), ...(withPicks ? boardPicks(data.rows) : [])]
       .sort((a, b) => b.value - a.value),
@@ -2420,27 +2409,31 @@ function DraftBoard({ data, settings, setSettings }) {
   return (
     <div className="flex flex-col gap-5">
       <header>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Draft Board</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Player Values</h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          A mock {describeSettings(settings)}{isDynasty ? " startup" : ""} draft built from
-          the <a href={PAGE_BY_KEY.dynasty.hash} className="underline">Value Board</a>'s numbers: every team takes the most
-          valuable player left, so 1.01 is the Value Board's No. 1, 1.02 its No. 2, and so on down.
-        </p>
-        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          Use it to see which round a player is worth{isDynasty ? " in a startup" : ""} and to plan your picks. It's what
-          the values say, not real drafts or ADP.
+          What every player{isDynasty && " and rookie pick"} is worth in a {describeSettings(settings)} league, by
+          KeepTradeCut's crowdsourced values. The <strong>draft board</strong> shows them as a mock{isDynasty ? " startup" : ""} draft
+          (every team takes the most valuable player left, so 1.01 is the No. 1); the <strong>value list</strong> lets you
+          search them and sort by age or 30-day trend.
         </p>
         <AboutData>
-          <DynastyStatusLine data={data} /> {isDynasty
+          <DynastyStatusLine data={data} /> The draft board is what the values say, not real drafts or ADP. {isDynasty
             ? "Rookie picks are drafted by value too (Early/Mid/Late where they're valued by slot); turn Picks off to leave them off."
             : "Rookie picks are left off the board."} If the value list runs out before the board does, the last picks are
           left empty.
+          {isDynasty && <>
+            {" "}In the list, <strong>Win-now</strong> marks players worth noticeably more this season than long term (good for
+            a contender to buy, a rebuilder to sell); <strong>Future</strong> marks young players whose value is mostly in
+            later seasons, including anyone out for the year.
+          </>}
         </AboutData>
       </header>
 
+      <div className="flex"><PillGroup options={WAR_ROOM_VIEWS} value={view} onChange={setView} /></div>
+
       <LeagueSettings settings={settings} setSettings={setSettings} />
 
-      <BoardGrid key={settings.mode} sport="nfl" players={players} teams={settings.teams}
+      {view === "list" ? <ValueList data={data} settings={settings} /> : <BoardGrid key={settings.mode} sport="nfl" players={players} teams={settings.teams}
         roundChoices={FOOTBALL_ROUNDS[settings.mode]} defaultRounds={isDynasty ? 25 : 15}
         highlightOptions={withPicks ? [...BOARD_HIGHLIGHT_OPTIONS, BOARD_PICK_HIGHLIGHT] : BOARD_HIGHLIGHT_OPTIONS}
         matchPos={(p, pos) => p.position === pos}
@@ -2448,7 +2441,7 @@ function DraftBoard({ data, settings, setSettings }) {
           <LabeledControl label="Picks"><PillGroup options={BOARD_PICKS_OPTIONS} value={picksSetting} onChange={setPicks} /></LabeledControl>
         )}
         stat={(p) => fmtValue(p.value)}
-        tip={(p) => `${p.name} · ${p.position === "PICK" ? "rookie pick" : `${p.position}${p.posRank}`} · value ${fmtValue(p.value)}${p.age ? ` · age ${p.age}` : ""}`} />
+        tip={(p) => `${p.name} · ${p.position === "PICK" ? "rookie pick" : `${p.position}${p.posRank}`} · value ${fmtValue(p.value)}${p.age ? ` · age ${p.age}` : ""}`} />}
     </div>
   );
 }
@@ -4427,7 +4420,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
                 {isMyLeague(raw.league.league_id) ? "★ Your league" : "☆ Make this my league"}
               </button>
               <button type="button" className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
-                title="Set the Value Board, War Room and Trade Desk to this league's settings"
+                title="Set the War Room and Trade Desk to this league's settings"
                 onClick={() => {
                   try { localStorage.setItem(DYNASTY_LEAGUE_KEY, raw.league.league_id); } catch (e) {}
                   setSettings((s) => ({ ...s, ...settingsFromLeague(raw.league), mode }));
@@ -7043,7 +7036,7 @@ function MyLeagueBar({ sport }) {
 
 // Where a profile's back link goes: the last tab opened in that sport.
 const lastRoom = {
-  nfl: { hash: "#/values", label: "Value Board" },
+  nfl: { hash: "#/draftboard", label: "War Room" },
   nba: { hash: "#/nba/rankings", label: "Big Board" },
 };
 
@@ -7642,7 +7635,7 @@ function NflProfile({ dynasty, settings }) {
 
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         Stats, projections, injuries and bio from Sleeper. Value from KeepTradeCut (FantasyCalc where KTC has none) for {describeSettings(settings)} leagues;
-        change the league settings on the <a href="#/values" className="underline">Value Board</a>.
+        change the league settings in the <a href="#/draftboard" className="underline">War Room</a>.
       </p>
     </div>
   );
@@ -7818,10 +7811,8 @@ const PAGES = [
     blurb: "Every player ranked by this week's projected points in your scoring, plus a start/sit call for tough lineup spots." },
   { key: "leagues", sport: "nfl", label: "My Leagues", short: "Boardroom", hash: "#/leagues", group: "Dynasty",
     blurb: "Your Sleeper leagues, each valued with its own settings and lineup, as dynasty or redraft: power rankings and where your team stands." },
-  { key: "dynasty", sport: "nfl", label: "Dynasty Values", short: "Value Board", hash: "#/values", group: "Dynasty",
-    blurb: "Look up what any player or rookie pick is worth in a trade, set to your league's format, size, scoring and TE premium." },
-  { key: "draftboard", sport: "nfl", label: "Draft Board", short: "War Room", hash: "#/draftboard", group: "Dynasty",
-    blurb: "Plan a startup draft: the Value Board's values laid out as a draft grid, so 1.01 is the most valuable player in your format." },
+  { key: "draftboard", sport: "nfl", label: "Player Values", short: "War Room", hash: "#/draftboard", group: "Dynasty",
+    blurb: "What every player and rookie pick is worth in your league's format, as a mock startup draft or a searchable list." },
   { key: "player", sport: "nfl", label: "Player Profile", short: "Player File", hash: "#/player/", hidden: true },
   { key: "trade", sport: "nfl", label: "Trade Calculator", short: "Trade Desk", hash: "#/trade", group: "Dynasty",
     blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, plus every team in your Sleeper league ranked." },
@@ -7859,7 +7850,6 @@ const PAGE_ICONS = {
   scores: <path d="M4 20V10M10 20V4M16 20v-7M2 20h20" />,
   waivers: <path d="M15 19a6 6 0 0 0-12 0M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6" />,
   injuries: <path d="M3 12h4l3-7 4 14 3-7h4" />,
-  values: <path d="M3 17l6-6 4 4 8-8M15 7h6v6" />,
   trade: <path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" />,
   scouting: <path d="M22 9 12 4 2 9l10 5 10-5ZM6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" />,
   draft: <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />,
@@ -7875,7 +7865,6 @@ const PAGE_STYLE = {
   injuries: { hue: "var(--hue-red)", icon: PAGE_ICONS.injuries },
   "nfl-rankings": { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
   leagues: { hue: "var(--hue-yellow)", icon: PAGE_ICONS.leagues },
-  dynasty: { hue: "var(--hue-violet)", icon: PAGE_ICONS.values },
   draftboard: { hue: "var(--hue-aqua)", icon: PAGE_ICONS.draft },
   player: { hue: "var(--hue-blue)", icon: PAGE_ICONS.profile },
   trade: { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
@@ -7905,6 +7894,7 @@ function pageFromHash(hash) {
   if (hash.startsWith(PLAYER_HASH.prospect)) return "prospect";
   if (hash.startsWith(`${LEAGUES_HASH}/`)) return "leagues";
   if (hash.startsWith(`${NBA_LEAGUES_HASH}/`)) return "nba-leagues";
+  if (hash === VALUE_LIST_HASH) return "draftboard"; // the War Room's value list (the old Value Board)
   return (PAGES.find((p) => p.hash === hash) || PAGE_BY_KEY.home).key;
 }
 
@@ -8507,8 +8497,7 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
             <h2 className="text-xl font-bold tracking-tight flex items-center gap-2.5" style={{ color: "var(--text-primary)" }}>
               <span className="w-1.5 h-5 rounded-full" style={{ background: "var(--trend-up)" }} />Dynasty risers this month
             </h2>
-            <a href="#/values" onClick={(e) => { e.preventDefault(); navigate("dynasty"); }}
-              className="text-sm font-medium" style={{ color: "var(--sport)" }}>Value Board →</a>
+            <a href={VALUE_LIST_HASH} className="text-sm font-medium" style={{ color: "var(--sport)" }}>All values →</a>
           </div>
           <ol className="rounded-xl border divide-y" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
             {risers.map((r, i) => (
@@ -8661,7 +8650,6 @@ function App() {
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
         {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}
-        {page === "dynasty" && <DynastyValues data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "draftboard" && <DraftBoard data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "player" && <NflProfile dynasty={dynasty} settings={settings} />}
         {page === "trade" && <TradeCalculator data={dynasty} settings={settings} setSettings={setSettings} />}

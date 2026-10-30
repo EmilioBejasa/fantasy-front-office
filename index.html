@@ -1354,9 +1354,11 @@ function SeasonGrid({ players, positionFilter, data }) {
 
   return (
     <>
-    <LabeledControl label="Sort">
-      <PillGroup options={[{ key: "ttl", label: "Total" }, { key: "avg", label: "Average" }]} value={sortBy} onChange={setSortBy} />
-    </LabeledControl>
+    <div className="flex">
+      <LabeledControl label="Sort">
+        <PillGroup options={[{ key: "ttl", label: "Total" }, { key: "avg", label: "Average" }]} value={sortBy} onChange={setSortBy} />
+      </LabeledControl>
+    </div>
     <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "75vh" }}>
       <table className="border-collapse text-sm" style={{ minWidth: "100%" }}>
         <thead>

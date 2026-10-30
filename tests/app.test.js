@@ -249,3 +249,37 @@ test("prospectHeadline: one line per position, and prospect pages route", () => 
   assert.equal(app.prospectHeadline("RB", { year: 2026, car: 135, rushYds: 763, rushTd: 13 }).sub, null);
   assert.equal(app.pageFromHash("#/prospect/5079720"), "prospect");
 });
+
+test("likelyRosteredIds: established scorers before the last two weeks, not breakouts", () => {
+  const players = [
+    { id: "vet", name: "Vet", team: "DET", position: "WR" },
+    { id: "breakout", name: "Breakout", team: "DET", position: "WR" },
+  ];
+  const scores = { 1: { vet: 20, breakout: 1 }, 2: { vet: 18, breakout: 2 }, 3: { vet: 19, breakout: 25 }, 4: { vet: 21, breakout: 24 } };
+  const ids = app.likelyRosteredIds({ players, scores });
+  assert.ok(ids.has("vet"));
+  assert.ok(ids.has("breakout")); // only two players, so both are in the top 120
+  const many = Array.from({ length: 130 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, team: "DET", position: "RB" }));
+  const sc = {};
+  for (const w of [1, 2, 3, 4]) sc[w] = Object.fromEntries(many.map((p, i) => [p.id, w <= 2 ? 30 - i * 0.2 : 5]));
+  sc[3].late = 30; sc[4].late = 30; sc[1].late = 1; sc[2].late = 1;
+  const top = app.likelyRosteredIds({ players: [...many, { id: "late", name: "Late", team: "DET", position: "RB" }], scores: sc });
+  assert.equal(top.size, 120);
+  assert.ok(top.has("p0"));
+  assert.ok(!top.has("late")); // a breakout in the last two weeks isn't counted as rostered
+});
+
+test("tradeMovers: biggest risers and fallers worth a roster spot", () => {
+  const row = (id, value, trend30, position = "WR") => ({ id, name: id, position, value, trend30 });
+  const m = app.tradeMovers([row("up", 5000, 900), row("up2", 3000, 300), row("down", 6000, -800), row("cheap", 900, 2000), row("pick", 4000, 999, "PICK")]);
+  assert.deepEqual(plain(m.rising.map((r) => r.id)), ["up", "up2"]);
+  assert.deepEqual(plain(m.falling.map((r) => r.id)), ["down"]);
+});
+
+test("valuedIds: top players by redraft value, picks left out", () => {
+  const rows = Array.from({ length: 160 }, (_, i) => ({ id: `${i}`, position: "WR", value: 9000 - i, redraftValue: i }));
+  rows.push({ id: "pick", position: "PICK", value: 99999, redraftValue: 99999 });
+  const ids = app.valuedIds(rows);
+  assert.equal(ids.size, 150);
+  assert.ok(ids.has("159") && !ids.has("0") && !ids.has("pick")); // ranked by redraftValue, not dynasty value
+});

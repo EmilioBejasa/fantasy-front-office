@@ -10,8 +10,8 @@ A fantasy football companion. Three tabs cover this season, on one shared player
 out from this season's usage, and a hand-picked pickup list), and **Injuries** (a live weekly injury report, plus who's out for the season or on IR/PUP,
 and the earliest week each player can return). Three more cover dynasty
 leagues: **Player Values** (live trade values for every player and rookie
-pick, as a mock draft board or a searchable list), a **Trade Calculator** (plus every team in a Sleeper league ranked by
-value), and a **2027 Class** preview of next year's rookies.
+pick, as a mock draft board or a searchable list), a **Trade Calculator** (starting from this month's biggest
+risers and fallers), and a **2027 Class** preview of next year's rookies.
 
 There's also a **basketball** side for season-long (redraft) points
 leagues, with seven rooms: Scoreboard, Waiver Desk, Training Room, Boardroom,
@@ -210,7 +210,9 @@ show up without editing anything. Each week's trimmed result is cached in
 `localStorage` (finished weeks for 6 hours, the current week for 5 minutes).
 While a week is in progress, the by-week view lists the teams **still to
 play**; their players stay blank until their game is in. The by-week
-selector only offers weeks with real scores and opens on the latest one. The
+selector only offers weeks with real scores and opens on the latest one that
+at least 16 teams have played, so from Thursday night until Sunday it stays on
+last week (the new week is one click away). It opens on ALL positions. The
 season grid still shows all 18 week columns, blank until played.
 
 The fetch-and-match logic lives in `scripts/lib/sleeper-scores.js`, which
@@ -313,8 +315,11 @@ the bench shows up). The score adds:
 
 Players need 7+ points and 35%+ of snaps a game over those two games (QBs 14+
 and 50%+). Anyone ruled out, doubtful, suspended or on IR/PUP is left off.
-Without a connected league, the preseason top 120 of `samplePlayers` count as
-rostered; with one, availability is exact. A score of 20+ is **Must Add**,
+Without a connected league, the top 120 skill players by points per game
+(2+ games) in the weeks before the last two count as rostered
+(`likelyRosteredIds`), so a breakout still shows up, and so do the top 150
+by today's redraft trade value (`valuedIds`), which catches stars back from
+injury; with one, availability is exact. A score of 20+ is **Must Add**,
 14+ **Speculative**, and below that QBs and TEs are **Streamers** and the
 rest **Deep League**. Each row's reason is written from the same numbers
 ("Jeremiyah Love is out (ankle); snaps up from 4% to 49%; …"). The top 20
@@ -348,9 +353,10 @@ players are listed.
 
 **This Week's Injury Report** (top of the tab) is **live**: every player in
 the pool, plus the waiver targets, whose current Sleeper designation is
-Questionable, Doubtful, Out or not active (e.g. Lamar Jackson, questionable
-with an ankle injury). Each row shows the injury and how the player's most
-recent game went. It comes from the same `/players/nfl` payload as the
+Out, Doubtful, Questionable or not active (e.g. Lamar Jackson, questionable
+with an ankle injury), most serious first, with a count of each above the
+table (Out red, Doubtful orange, Questionable amber). Each row shows the
+injury and how the player's most recent game went. It comes from the same `/players/nfl` payload as the
 trending panel, now cached for 6 hours instead of 24 because designations
 change daily. Official injury reports come out Wednesday through Friday, so
 early in the week a designation may be carried over from the last game.
@@ -495,16 +501,11 @@ The trade is stored in the URL hash (`#trade=<ids>|<ids>`), so a reload
 keeps it and the link can be shared. A link with a trade in it opens
 straight on this tab.
 
-**League team values** (below the calculator): enter a Sleeper username
-(then pick a league) or a league ID. Every team is ranked by the value of its
-roster plus the rookie picks it owns, with a bar split by position, and
-"starters": the best lineup it can field for the league's roster slots.
-Sleeper only lists picks that have changed hands (`/traded_picks`), so each
-team starts with its own picks for the next three drafts (rounds 1-4) and
-trades are applied on top. Picks are valued as FantasyCalc's generic
-mid-round pick for that year. Loading a league syncs the settings above to
-it. Expand a team and use **+A / +B** to drop any player or pick into the
-trade.
+**Market movers this month** (below the calculator, `TradeMovers`): the
+five biggest 30-day risers and fallers worth at least 1,500, each with
+**+A / +B** to drop him into the trade. Ranking every team in a Sleeper
+league is the Boardroom's job (it used to be repeated here too), and the
+panel links there.
 
 ### My Leagues
 

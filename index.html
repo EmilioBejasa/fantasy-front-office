@@ -1047,10 +1047,13 @@ function SleeperTrending() {
 // - how many Sleeper leagues added him in the last two days (log scale, from 1,000)
 // - a bonus when a 10-point-a-game starter at his position on his team is out,
 //   and a penalty when he's on bye next week
-// Without a connected league, the preseason top 120 of the player pool count
-// as rostered. Anyone ruled out, doubtful or on IR/PUP is left off.
+// Without a connected league, two things count as rostered: this season's top
+// 120 scorers per game before the last two weeks (likelyRosteredIds), so a
+// breakout still shows up, and the top 150 by current redraft trade value
+// (valuedIds), which catches stars back from injury. Anyone ruled out, doubtful or on IR/PUP is left off.
 const LIVE_PICKS_LIMIT = 20;
 const LIKELY_ROSTERED = 120;
+const LIKELY_ROSTERED_BY_VALUE = 150;
 const LIVE_PICKS_LOOKBACK_HOURS = 48;
 const PICK_OUT_STATUSES = ["IR", "PUP", "Sus", "Out", "Doubtful", "NA"];
 const PICK_TIERS = [["Must Add", 20], ["Speculative", 14]];
@@ -1065,6 +1068,28 @@ function waiverWeek(data) {
   if (!latest) return null;
   const byes = Object.keys(BYE_WEEKS).filter((t) => BYE_WEEKS[t] === latest).length;
   return (data.teamsPlayed[latest] || []).length + byes >= 28 ? latest + 1 : latest;
+}
+
+// The players who were already producing before the last two weeks: the top
+// LIKELY_ROSTERED skill players by points per game (2+ games) in the weeks
+// before them. A stand-in for "rostered" when no league is connected.
+function likelyRosteredIds(data) {
+  const earlier = playedWeeks(data.scores).slice(0, -2);
+  return new Set(data.players
+    .filter((p) => SKILL_POSITIONS.includes(p.position))
+    .map((p) => [p.id, earlier.map((w) => data.scores[w]?.[p.id]).filter((x) => x !== undefined)])
+    .filter(([, pts]) => pts.length >= 2)
+    .sort((a, b) => avgOf(b[1]) - avgOf(a[1]))
+    .slice(0, LIKELY_ROSTERED)
+    .map(([id]) => id));
+}
+
+// Sleeper ids of the top LIKELY_ROSTERED_BY_VALUE players by today's redraft
+// value (the dynasty rows carry it as redraftValue; redraft rows as value).
+function valuedIds(rows) {
+  const worth = (r) => r.redraftValue ?? r.value ?? 0;
+  return new Set(rows.filter((r) => r.position !== "PICK").sort((a, b) => worth(b) - worth(a))
+    .slice(0, LIKELY_ROSTERED_BY_VALUE).map((r) => String(r.id)));
 }
 
 // data: useLiveScores. adds: {sleeperId: adds}. skip(sleeperId, player): true
@@ -1182,7 +1207,7 @@ function LivePicks({ scores, sleeperPlayers, picks }) {
           Live picks{picks.week ? ` for Week ${picks.week}` : ""} <span className="font-normal" style={{ color: "var(--text-muted)" }}>· live</span>
         </h3>
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {connected ? "players available in your league" : "outside the preseason top 120 · connect your league above for exact availability"}
+          {connected ? "players available in your league" : "leaving out this season's top scorers and top 150 by trade value · connect your league above for exact availability"}
         </span>
       </div>
       {!ready ? (
@@ -1199,7 +1224,7 @@ function LivePicks({ scores, sleeperPlayers, picks }) {
   );
 }
 
-function WaiverTargets({ scores, sleeperPlayers }) {
+function WaiverTargets({ scores, sleeperPlayers, values }) {
   // Sorted by urgency (Must Add first, Deep League last) — WAIVER_PRIORITIES
   // is already in that order, so this just needs each entry's index in it.
   const sortedTargets = useMemo(
@@ -1221,11 +1246,12 @@ function WaiverTargets({ scores, sleeperPlayers }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const poolIndex = useMemo(() => Object.fromEntries(samplePlayers.map((p, i) => [p.id, i])), []);
+  const established = useMemo(() => likelyRosteredIds(scores), [scores]);
+  const valued = useMemo(() => valuedIds(values), [values]);
   const picks = useMemo(() => buildLivePicks({
     data: scores, sleeperPlayers, resolve, adds,
-    skip: (sid, p) => (connected ? false : (poolIndex[p.id] ?? Infinity) < LIKELY_ROSTERED),
-  }), [scores, sleeperPlayers, resolve, adds, connected, poolIndex]);
+    skip: (sid, p) => !connected && (established.has(p.id) || valued.has(String(sid))),
+  }), [scores, sleeperPlayers, resolve, adds, connected, established, valued]);
 
   const week = waiverWeek(scores);
   const stale = week && week > WAIVER_TARGETS_WEEK;
@@ -1425,10 +1451,9 @@ const WEEKLY_VIEWS = [
   { key: "grid", label: "Season Grid" },
 ];
 
-// RB/WR ahead of QB/TE, ALL last rather than first — matches how this app's
-// audience actually scans a position filter (skill positions people are
-// picking waivers/streamers for first, the full unfiltered view last).
-const POSITIONS = ["RB", "WR", "QB", "TE", "ALL"];
+// ALL first, like every other filter in the app (basketball, 2027 Class),
+// then RB/WR ahead of QB/TE.
+const POSITIONS = ["ALL", "RB", "WR", "QB", "TE"];
 
 // Position colors for filters and badges, like most fantasy sites (TE uses
 // a deeper gold so white text on a selected pill stays readable).
@@ -1440,7 +1465,7 @@ const POS_PILL_COLOR = {
 const posPillColor = (pos) => POS_PILL_COLOR[pos] || "var(--series-blue)";
 const POSITION_OPTIONS = POSITIONS.map((p) => ({ key: p, label: p }));
 // With kickers and defenses, for the Scoreboard and Film Room.
-const WEEKLY_POSITION_OPTIONS = ["RB", "WR", "QB", "TE", "K", "DEF", "ALL"].map((p) => ({ key: p, label: p }));
+const WEEKLY_POSITION_OPTIONS = ["ALL", "RB", "WR", "QB", "TE", "K", "DEF"].map((p) => ({ key: p, label: p }));
 
 function PosBadge({ pos, rank }) {
   return (
@@ -1452,14 +1477,17 @@ function PosBadge({ pos, rank }) {
 
 function WeeklyScores({ players, data }) {
   const [view, setView] = useState("byWeek");
-  // Open on the most recent week with results.
+  // Open on the most recent week that's mostly played: from Thursday night
+  // until Sunday a new week has only a game or two in, so it stays on last
+  // week (the new one is a click away).
   const weeks = playedWeeks(data.scores);
-  const latestWeek = weeks[weeks.length - 1] ?? 1;
+  const mostlyPlayed = (w) => !data.teamsPlayed?.[w] || data.teamsPlayed[w].length >= 16;
+  const latestWeek = [...weeks].reverse().find(mostlyPlayed) ?? weeks[weeks.length - 1] ?? 1;
   const [pickedWeek, setWeek] = useState(null);
   // Follow the latest week (it can change once live data arrives) until a
   // week is picked by hand.
   const week = pickedWeek ?? latestWeek;
-  const [positionFilter, setPositionFilter] = useState("RB");
+  const [positionFilter, setPositionFilter] = useState("ALL");
 
   const scores = data.scores[week];
   const byeTeams = useMemo(
@@ -1663,11 +1691,12 @@ function InjuryTable({ rows, showReturn }) {
 // follow the official injury reports (Wednesday to Friday); early in the week
 // they're carried over from the last game, which is why the latest game's
 // result is shown alongside.
-const REPORT_STATUSES = ["Questionable", "Doubtful", "Out", "NA"];
+// Most serious first: the report is sorted in this order.
+const REPORT_STATUSES = ["Out", "Doubtful", "Questionable", "NA"];
 const REPORT_STATUS_LABEL = { NA: "Not active" };
 const REPORT_STATUS_COLOR = {
   Questionable: "var(--series-amber)",
-  Doubtful: "var(--series-red)",
+  Doubtful: "var(--hue-orange)",
   Out: "var(--series-red)",
   NA: "var(--text-muted)",
 };
@@ -1726,6 +1755,13 @@ function InjuryReport({ players, positionFilter, data, sectionTitle }) {
   return (
     <section className="flex flex-col gap-2">
       {sectionTitle("This Week's Injury Report", rows.length)}
+      {state.status === "ready" && rows.length > 0 && (
+        <p className="text-xs flex flex-wrap gap-x-3" style={{ color: "var(--text-muted)" }}>
+          {REPORT_STATUSES.map((st) => [st, rows.filter((r) => r.sleeper.status === st).length]).filter(([, n]) => n > 0).map(([st, n]) => (
+            <span key={st}><span className="font-semibold" style={{ color: REPORT_STATUS_COLOR[st] }}>{n}</span> {REPORT_STATUS_LABEL[st] || st}</span>
+          ))}
+        </p>
+      )}
       {state.status === "loading" ? message("Loading the latest designations from Sleeper…")
         : state.status === "error" ? message(`Couldn't reach Sleeper (${state.message}). The live injury report needs the page served over http(s).`)
         : rows.length === 0 ? message("No one at this position is questionable, doubtful or out right now.")
@@ -2867,171 +2903,66 @@ function buildLeagueTeams(raw, rows, byId, sidelined = () => null) {
   return teams.sort((a, b) => b.total - a.total);
 }
 
-function LeagueValues({ rows, byId, settings, setSettings, onAdd }) {
-  const [input, setInput] = useState(() => { try { return localStorage.getItem(DYNASTY_LEAGUE_KEY) || ""; } catch (e) { return ""; } });
-  const [leagues, setLeagues] = useState(null);
-  const [raw, setRaw] = useState(null);
-  const [status, setStatus] = useState({ state: "idle" });
-  const [expanded, setExpanded] = useState(null);
-
-  const loadLeague = async (leagueId) => {
-    setStatus({ state: "loading" });
-    setExpanded(null);
-    try {
-      const [league, rosters, users, traded] = await Promise.all([
-        sleeperGet(`/league/${leagueId}`), sleeperGet(`/league/${leagueId}/rosters`),
-        sleeperGet(`/league/${leagueId}/users`), sleeperGet(`/league/${leagueId}/traded_picks`),
-      ]);
-      if (!league) throw new Error("no Sleeper league with that ID");
-      const synced = settingsFromLeague(league);
-      setSettings((s) => ({ ...s, ...synced }));
-      setRaw({ league, rosters: rosters || [], users: users || [], traded: traded || [] });
-      setStatus({ state: "ready" });
-    } catch (err) {
-      setStatus({ state: "error", message: err.message });
-    }
+// The Trade Desk's starting point: this month's biggest risers and fallers
+// (players worth at least MOVERS_MIN_VALUE, by 30-day trend), each with +A / +B
+// to drop him into the trade. Ranking every team in a league is the
+// Boardroom's job, linked underneath.
+const MOVERS_COUNT = 5;
+const MOVERS_MIN_VALUE = 1500;
+function tradeMovers(rows) {
+  const players = rows.filter((r) => r.position !== "PICK" && r.value >= MOVERS_MIN_VALUE && r.trend30);
+  return {
+    rising: players.filter((r) => r.trend30 > 0).sort((a, b) => b.trend30 - a.trend30).slice(0, MOVERS_COUNT),
+    falling: players.filter((r) => r.trend30 < 0).sort((a, b) => a.trend30 - b.trend30).slice(0, MOVERS_COUNT),
   };
+}
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const value = input.trim();
-    if (!value) return;
-    try { localStorage.setItem(DYNASTY_LEAGUE_KEY, value); } catch (err) {}
-    setLeagues(null);
-    if (/^\d{9,}$/.test(value)) return loadLeague(value);
-    setStatus({ state: "loading" });
-    try {
-      const user = await sleeperGet(`/user/${encodeURIComponent(value)}`);
-      if (!user) throw new Error(`no Sleeper user named "${value}"`);
-      const state = await sleeperGet("/state/nfl");
-      const list = (await sleeperGet(`/user/${user.user_id}/leagues/nfl/${state.league_season || state.season}`)) || [];
-      if (list.length === 0) throw new Error(`"${value}" isn't in any leagues this season`);
-      if (list.length === 1) return loadLeague(list[0].league_id);
-      setLeagues(list);
-      setStatus({ state: "idle" });
-    } catch (err) {
-      setStatus({ state: "error", message: err.message });
-    }
-  };
-
-  const teams = useMemo(() => (raw ? buildLeagueTeams(raw, rows, byId) : []), [raw, rows, byId]);
-  const maxTotal = teams[0]?.total || 1;
-
-  return (
-    <section className="flex flex-col gap-3">
-      <header>
-        <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>League team values</h3>
-        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-          Enter a Sleeper username or league ID to rank every team by the value of its roster plus the rookie picks it
-          owns (the next three drafts, rounds 1-{LEAGUE_PICK_ROUNDS}, valued as mid-round picks). "Starters" is the best
-          lineup the roster can field. Loading a league switches the settings above to match it (format, QB, team count,
-          scoring and TE premium). Use +A / +B on
-          any player to add them to the trade above.
-        </p>
-      </header>
-
-      <form onSubmit={submit} className="flex gap-2 flex-wrap">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Sleeper username or league ID" aria-label="Sleeper username or league ID"
-          className="rounded-md border px-3 py-1.5 text-sm flex-1" style={{ ...inputStyle, minWidth: "12rem" }} />
-        <button type="submit" className="btn-primary rounded-md px-4 py-1.5 text-sm font-semibold">Load</button>
-      </form>
-
-      {leagues && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>Pick a league:</p>
-          <PillGroup options={leagues.map((l) => ({ key: l.league_id, label: l.name }))}
-            value={raw?.league.league_id} onChange={loadLeague} />
-        </div>
-      )}
-
-      {status.state === "loading" && <p className="text-sm py-3" style={{ color: "var(--text-muted)" }}>Loading from Sleeper…</p>}
-      {status.state === "error" && (
-        <p className="text-sm py-3" style={{ color: "var(--text-muted)" }}>
-          Couldn't load that ({status.message}). This needs the page served over http(s) with network access.
-        </p>
-      )}
-
-      {status.state === "ready" && raw && (
-        <div className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-          <div className="flex items-baseline justify-between flex-wrap gap-2">
-            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              {raw.league.name}{" "}
-              <span className="font-normal" style={{ color: "var(--text-muted)" }}>
-                · settings synced from this league: {describeSettings(settings)}
+function TradeMovers({ rows, inDeal, onAdd }) {
+  const { rising, falling } = useMemo(() => tradeMovers(rows), [rows]);
+  const column = (title, list, color) => (
+    <div className="flex flex-col gap-1">
+      <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color }}>{title}</h4>
+      {list.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>No big moves this month.</p> : (
+        <ul className="flex flex-col">
+          {list.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0 text-sm" style={{ borderColor: "var(--border)" }}>
+              <span className="min-w-0 truncate">
+                <PlayerLink id={r.id} pos={r.position} className="">{r.name}</PlayerLink>{" "}
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.position}{r.posRank} · {r.team || "FA"}</span>
               </span>
-            </p>
-            <div className="flex items-center gap-3 flex-wrap">
-              {POS_KEYS.map((k) => (
-                <span key={k} className="text-xs flex items-center gap-1" style={{ color: "var(--text-secondary)" }}>
-                  <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: POS_COLOR[k] }} />{POS_LABEL[k]}
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className="tabular-nums text-xs" style={{ color: "var(--text-secondary)" }}>{fmtValue(r.value)}</span>
+                <span className="tabular-nums text-xs font-semibold w-12 text-right" style={{ color }}>
+                  {r.trend30 > 0 ? "+" : ""}{r.trend30.toLocaleString()}
                 </span>
-              ))}
-            </div>
-          </div>
-
-          <ol className="flex flex-col">
-            {teams.map((t, i) => (
-              <li key={t.rosterId} className="border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                <button type="button" onClick={() => setExpanded(expanded === t.rosterId ? null : t.rosterId)}
-                  className="row-btn w-full text-left py-2 px-1 grid gap-x-3 gap-y-1 items-center"
-                  style={{ gridTemplateColumns: "1.5rem minmax(0, 1fr) auto" }}>
-                  <span className="text-sm tabular-nums text-right" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-                  <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
-                    {expanded === t.rosterId ? "▾ " : "▸ "}{t.name}
-                  </span>
-                  <span className="text-sm tabular-nums text-right" style={{ color: "var(--text-primary)" }}>
-                    <strong>{fmtValue(t.total)}</strong>{" "}
-                    <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>· starters {fmtValue(t.starters)}</span>
-                  </span>
-                  <span />
-                  <span className="col-span-2">
-                    <span className="flex h-2.5 gap-0.5" style={{ width: `${(t.total / maxTotal) * 100}%` }}>
-                      {POS_KEYS.filter((k) => t.byPos[k] > 0).map((k, j, arr) => (
-                        <span key={k} title={`${POS_LABEL[k]}: ${fmtValue(t.byPos[k])}`}
-                          style={{
-                            width: `${(t.byPos[k] / t.total) * 100}%`, background: POS_COLOR[k],
-                            borderTopLeftRadius: j === 0 ? 4 : 0, borderBottomLeftRadius: j === 0 ? 4 : 0,
-                            borderTopRightRadius: j === arr.length - 1 ? 4 : 0, borderBottomRightRadius: j === arr.length - 1 ? 4 : 0,
-                          }} />
-                      ))}
-                    </span>
-                  </span>
-                </button>
-
-                {expanded === t.rosterId && (
-                  <div className="pb-3 pl-9 flex flex-col gap-2">
-                    <p className="text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                      {POS_KEYS.map((k) => `${POS_LABEL[k]} ${fmtValue(t.byPos[k])}`).join(" · ")}
-                    </p>
-                    <ul className="flex flex-col gap-1">
-                      {t.assets.map((a, j) => (
-                        <li key={`${a.id}-${j}`} className="flex items-center justify-between gap-2 text-sm">
-                          <span className="min-w-0 truncate">
-                            <span className="inline-block w-2 h-2 rounded-sm mr-1.5" style={{ background: POS_COLOR[a.position] }} />
-                            <PlayerLink id={a.id} pos={a.position} className="">{a.name}</PlayerLink>{" "}
-                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                              {a.position === "PICK" ? "Pick" : `${a.position}${a.posRank}${a.age ? ` · ${a.age}` : ""}`}
-                            </span>
-                          </span>
-                          <span className="flex items-center gap-1.5 shrink-0">
-                            <span className="tabular-nums text-xs" style={{ color: "var(--text-secondary)" }}>{fmtValue(a.value)}</span>
-                            {TRADE_SIDES.map((s, si) => (
-                              <button key={s} type="button" onClick={() => onAdd(si, a.id)} title={`Add to what Team ${s} gets`} aria-label={`Add ${a.name} to what Team ${s} gets`}
-                                className="pill text-xs rounded px-1.5 font-semibold" style={{ "--pill-accent": SIDE_COLOR[s] }}>
-                                +{s}
-                              </button>
-                            ))}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ol>
-        </div>
+                {TRADE_SIDES.map((s, si) => (
+                  <button key={s} type="button" disabled={inDeal.has(r.id)} onClick={() => onAdd(si, r.id)}
+                    title={`Add to what Team ${s} gets`} aria-label={`Add ${r.name} to what Team ${s} gets`}
+                    className="pill text-xs rounded px-1.5 font-semibold disabled:opacity-40" style={{ "--pill-accent": SIDE_COLOR[s] }}>
+                    +{s}
+                  </button>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
+    </div>
+  );
+  return (
+    <section className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Market movers this month</h3>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>Value change over 30 days · +A / +B adds him to the trade</span>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        {column("Rising", rising, "var(--trend-up)")}
+        {column("Falling", falling, "var(--series-red)")}
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        Want every team in your Sleeper league ranked? That's in
+        the <a href={PAGE_BY_KEY.leagues.hash} className="underline">Boardroom</a>.
+      </p>
     </section>
   );
 }
@@ -4951,7 +4882,7 @@ function TradeCalculator({ data, settings, setSettings }) {
 
       <MarketComparison sides={sides} byId={byId} rows={data.rows} settings={settings} result={result} source={data.source} />
 
-      <LeagueValues rows={data.rows} byId={byId} settings={settings} setSettings={setSettings} onAdd={add} />
+      <TradeMovers rows={data.rows} inDeal={inDeal} onAdd={add} />
     </div>
   );
 }
@@ -7660,7 +7591,7 @@ const PAGES = [
     blurb: "What every player and rookie pick is worth in your league's format, as a mock startup draft or a searchable list." },
   { key: "player", sport: "nfl", label: "Player Profile", short: "Player File", hash: "#/player/", hidden: true },
   { key: "trade", sport: "nfl", label: "Trade Calculator", short: "Trade Desk", hash: "#/trade", group: "Dynasty",
-    blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, plus every team in your Sleeper league ranked." },
+    blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, starting from this month's biggest risers and fallers." },
   { key: "class2027", sport: "nfl", label: "2027 Rookie Class", short: "Scouting Dept.", hash: "#/2027", group: "Dynasty",
     blurb: "The top prospects for next year's rookie drafts, and what a 2027 pick is worth right now." },
   { key: "prospect", sport: "nfl", label: "Prospect Profile", short: "Prospect File", hash: "#/prospect/", hidden: true },
@@ -8254,15 +8185,18 @@ function FeatureCard({ p, navigate }) {
   const { hue, icon } = PAGE_STYLE[p.key];
   return (
     <a href={p.hash} onClick={(e) => { e.preventDefault(); navigate(p.key); }}
-      className="card-link folder rounded-xl border p-5 flex flex-col gap-3" data-tab={p.short}
+      className="card-link folder rounded-xl border p-4 sm:p-5 flex flex-row sm:flex-col items-start gap-3" data-tab={p.short}
       style={{ borderColor: "var(--border)", "--card-hue": hue }}>
-      <span className="w-10 h-10 rounded-lg flex items-center justify-center"
+      <span className="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center"
         style={{ background: `color-mix(in srgb, ${hue} 16%, transparent)`, color: hue }}>
         <Svg size={20}>{icon}</Svg>
       </span>
-      <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{p.label}</span>
-      <span className="text-sm flex-1" style={{ color: "var(--text-secondary)" }}>{p.blurb}</span>
-      <span className="text-sm font-semibold" style={{ color: hue }}>Open <span className="card-arrow">→</span></span>
+      {/* On phones a compact row (icon, name, one-line blurb); the full card from sm up. */}
+      <span className="flex flex-col gap-1 sm:gap-3 flex-1 min-w-0">
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{p.label}</span>
+        <span className="text-sm line-clamp-2 sm:line-clamp-none" style={{ color: "var(--text-secondary)" }}>{p.blurb}</span>
+      </span>
+      <span className="hidden sm:inline text-sm font-semibold" style={{ color: hue }}>Open <span className="card-arrow">→</span></span>
     </a>
   );
 }
@@ -8280,7 +8214,7 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
       <section className="hero-glow -mx-4 px-4 pt-10 pb-4 sm:pt-16 text-center flex flex-col items-center gap-5">
         <span className="text-xs font-semibold uppercase tracking-wider rounded-md border px-3 py-1"
           style={{ borderColor: "var(--sport)", color: "var(--sport)", background: "var(--surface-1)" }}>
-          Football{latestWeek ? ` · Week ${latestWeek}` : ""} · Basketball
+          {latestWeek ? `NFL Week ${latestWeek} · ` : ""}Football &amp; Basketball
         </span>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight max-w-3xl" style={{ color: "var(--text-primary)", lineHeight: 1.1 }}>
           Run your fantasy team like a <span className="text-gradient">GM</span>
@@ -8294,8 +8228,8 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
           <button type="button" onClick={() => navigate("trade")} className="btn-primary rounded-lg px-5 py-2.5 text-sm font-semibold">
             Open the Trade Desk
           </button>
-          <button type="button" onClick={() => navigate("nba-rankings")} className="btn-secondary rounded-lg px-5 py-2.5 text-sm font-semibold">
-            Basketball Big Board
+          <button type="button" onClick={() => navigate(sport === "nba" ? "nba-waivers" : "waivers")} className="btn-secondary rounded-lg px-5 py-2.5 text-sm font-semibold">
+            This week's waiver targets
           </button>
         </div>
         {myLeague.nfl && (
@@ -8326,7 +8260,7 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
           {SPORT_GROUPS[s.key].map((g) => (
             <div key={g} className="flex flex-col gap-1">
               <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{g}</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={`grid gap-x-4 gap-y-1 sm:gap-4 sm:grid-cols-2 ${sportPages(s.key, g).length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
                 {sportPages(s.key, g).map((p) => <FeatureCard key={p.key} p={p} navigate={navigate} />)}
               </div>
             </div>
@@ -8489,7 +8423,7 @@ function App() {
         <RoomBoundary key={page} room={current.short} onHome={() => navigate("home")}>
         {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} sport={sport} setSport={setSport} />}
         {page === "weekly" && <WeeklyScores players={liveScores.players} data={liveScores} />}
-        {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} />}
+        {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} values={dynasty.rows} />}
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
         {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}

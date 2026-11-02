@@ -561,8 +561,10 @@ position rooms and lineup, bench, power rankings and the settings table:
   `SELL_AGE` for their position, QB 31, RB 26, WR 28, TE 29, to the contenders, and build around players 24 and under);
   a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
   just the weakest room to upgrade and the deepest to deal from.
-- **Trade targets page** (`#/leagues/<id>/trades`, `tradeMarket` and `TradeBucket`, dynasty only; linked from the
-  league page between the standings and the power rankings): every trade target in the league, the same for every
+- **Trade Block** (its own tab under Dynasty, `#/targets`; `MyLeagues` with `targetsPage`, `tradeMarket` and
+  `TradeBucket`, dynasty only for now): `#/targets` lists your dynasty leagues (your league first), and
+  `#/targets/<id>` is one league's trade targets, also linked from the league page between the standings and the
+  power rankings. Every trade target in the league, the same for every
   team, in two buckets split by position. **If you're competing**: veterans (26 and up) on rebuilding teams who score
   like starters (top 1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game, `MARKET_STARTERS`), by points per
   game. **If you're rebuilding**: players 24 and under worth 30%+ of the top value on contending teams, bench players

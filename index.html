@@ -2980,10 +2980,14 @@ const SLOT_LABEL = { FLEX: "Flex", WRRB_FLEX: "W/R flex", REC_FLEX: "W/T flex", 
 const IDP_SLOTS = ["DL", "LB", "DB", "IDP_FLEX"];
 const ROOM_POSITIONS = ["QB", "RB", "WR", "TE"];
 
-const leagueIdFromHash = () => (/^#\/leagues\/(\d+)/.exec(window.location.hash) || [])[1] || null;
-// #/leagues/<id>/trades is the league's trade targets page.
+// The Trade Block tab: #/targets lists dynasty leagues, #/targets/<id> is one
+// league's trade targets. It's the league page's code (MyLeagues) in targets mode.
+const TARGETS_HASH = "#/targets";
 const LEAGUE_TRADES = "trades";
-const leagueViewFromHash = () => (/^#\/leagues\/\d+\/trades\b/.test(window.location.hash) ? LEAGUE_TRADES : null);
+const leagueIdAfter = (base) => (window.location.hash.startsWith(`${base}/`)
+  ? (/^\d+/.exec(window.location.hash.slice(base.length + 1)) || [])[0] || null : null);
+// A team to open on the league page once it loads (set when a team is clicked on the Trade Block).
+let pendingLeagueTeam = null;
 
 // "QB, 2 RB, 3 WR, TE, 2 Flex, Superflex"
 function lineupSummary(rosterPositions) {
@@ -4632,7 +4636,7 @@ function RosterBreakdown({ team, isDynasty }) {
   );
 }
 
-function MyLeagues({ settings, setSettings, navigate }) {
+function MyLeagues({ settings, setSettings, navigate, targetsPage = false }) {
   const [input, setInput] = useState(() => { try { return localStorage.getItem(SLEEPER_USER_KEY) || ""; } catch (e) { return ""; } });
   const [user, setUser] = useState(null);
   const [leagues, setLeagues] = useState(null);
@@ -4643,20 +4647,22 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const mode = raw ? settingsFromLeague(raw.league).mode : "dynasty";
   const [focus, setFocus] = useState(null);
   // #/leagues lists the leagues; #/leagues/<id> is that league's own page.
-  const [leagueId, setLeagueId] = useState(leagueIdFromHash);
-  const [leagueView, setLeagueView] = useState(leagueViewFromHash);
+  // On the Trade Block, #/targets/<id> is that league's trade targets.
+  const base = targetsPage ? TARGETS_HASH : LEAGUES_HASH;
+  const idFromHash = () => leagueIdAfter(base);
+  const leagueView = targetsPage ? LEAGUE_TRADES : null;
+  const [leagueId, setLeagueId] = useState(idFromHash);
   useEffect(() => {
-    const sync = () => { setLeagueId(leagueIdFromHash()); setLeagueView(leagueViewFromHash()); };
+    const sync = () => setLeagueId(idFromHash());
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
     return () => { window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); };
   }, []);
-  const goTo = (id, view = null) => {
-    const hash = id ? `${LEAGUES_HASH}/${id}${view ? `/${view}` : ""}` : LEAGUES_HASH;
+  const goTo = (id) => {
+    const hash = id ? `${base}/${id}` : base;
     try { window.history.pushState(null, "", hash); } catch (e) {}
-    lastRoom.nfl = { hash, label: "Boardroom" };
+    lastRoom.nfl = { hash, label: targetsPage ? "Trade Block" : "Boardroom" };
     setLeagueId(id ? String(id) : null);
-    setLeagueView(id ? view : null);
     window.scrollTo(0, 0);
   };
 
@@ -4667,7 +4673,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
         sleeperGet(`/league/${leagueId}`), sleeperGet(`/league/${leagueId}/rosters`),
         sleeperGet(`/league/${leagueId}/users`), sleeperGet(`/league/${leagueId}/traded_picks`),
       ]);
-      if (leagueIdFromHash() !== String(leagueId)) return; // moved on to another page meanwhile
+      if (idFromHash() !== String(leagueId)) return; // moved on to another page meanwhile
       if (!league) throw new Error("no Sleeper league with that ID");
       setRaw({ league, rosters: rosters || [], users: users || [], traded: traded || [] });
       setFocus(null);
@@ -4704,9 +4710,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
   }, [leagueId]);
   useEffect(() => {
     document.title = leagueId && raw?.league.league_id === leagueId
-      ? `${leagueView === LEAGUE_TRADES ? "Trade targets · " : ""}${raw.league.name} · Boardroom · Fantasy Front Office`
-      : "Boardroom · Football · Fantasy Front Office";
-  }, [leagueId, leagueView, raw]);
+      ? `${raw.league.name} · ${targetsPage ? "Trade Block" : "Boardroom"} · Fantasy Front Office`
+      : `${targetsPage ? "Trade Block" : "Boardroom"} · Football · Fantasy Front Office`;
+  }, [leagueId, raw]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -4790,16 +4796,19 @@ function MyLeagues({ settings, setSettings, navigate }) {
     if (next.has(rosterId)) next.delete(rosterId); else next.add(rosterId);
     return next;
   });
-  const pendingTeam = useRef(null);
   useEffect(() => {
-    if (leagueView || pendingTeam.current == null) return;
-    const rosterId = pendingTeam.current;
-    pendingTeam.current = null;
+    if (targetsPage || !teams.length || pendingLeagueTeam?.leagueId !== raw?.league.league_id) return;
+    const { rosterId } = pendingLeagueTeam;
+    pendingLeagueTeam = null;
     viewTeam(rosterId);
-  }, [leagueView]);
+  }, [teams]);
   const viewTeam = (rosterId) => {
-    // From the trade targets page, back to the league page with that team open.
-    if (leagueView) { pendingTeam.current = rosterId; goTo(leagueId); return; }
+    // From the Trade Block, over to the league page with that team open.
+    if (targetsPage) {
+      pendingLeagueTeam = { leagueId: raw.league.league_id, rosterId };
+      window.location.hash = `${LEAGUES_HASH}/${raw.league.league_id}`;
+      return;
+    }
     if (rosterId === team?.rosterId) return document.getElementById("league-team")?.scrollIntoView({ behavior: "smooth" });
     setOpenTeams((s) => new Set(s).add(rosterId));
     setTimeout(() => document.getElementById(`team-${rosterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -4815,7 +4824,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
 
   const posAvg = Object.fromEntries(ROOM_POSITIONS.map((p) => [p, n ? teams.reduce((s, t) => s + t.byPos[p], 0) / n : 0]));
 
-  const leagueLink = (id) => `${LEAGUES_HASH}/${id}`;
+  const leagueLink = (id) => `${base}/${id}`;
   const my = React.useContext(MyLeagueContext);
   const isMyLeague = (id) => my.nfl?.leagueId === String(id);
   const follow = (fn) => (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; e.preventDefault(); fn(); };
@@ -4825,10 +4834,12 @@ function MyLeagues({ settings, setSettings, navigate }) {
       {!leagueId ? (
         <>
           <header>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>My Leagues</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
+              {targetsPage ? "Trade Targets" : "My Leagues"}</h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-              Load your Sleeper leagues, then open one to see where your team stands and who to trade for, valued with that
-              league's own format, size, scoring, TE premium and starting lineup.
+              {targetsPage
+                ? "Pick a dynasty league to see every player worth trading for in it: veterans to buy if you're competing, young players if you're rebuilding."
+                : "Load your Sleeper leagues, then open one to see where your team stands and who to trade for, valued with that league's own format, size, scoring, TE premium and starting lineup."}
             </p>
           </header>
 
@@ -4847,7 +4858,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
 
           {leagues && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {leagues.map((l) => (
+              {(targetsPage
+                ? leagues.filter((l) => settingsFromLeague(l).mode === "dynasty").sort((a, b) => isMyLeague(b.league_id) - isMyLeague(a.league_id))
+                : leagues).map((l) => (
                 <a key={l.league_id} href={leagueLink(l.league_id)} onClick={follow(() => goTo(l.league_id))}
                   className="row-btn rounded-lg border px-4 py-3 flex flex-col gap-1"
                   style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
@@ -4855,7 +4868,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
                     {l.name}{isMyLeague(l.league_id) && <span className="text-xs font-semibold ml-1.5" style={{ color: "var(--brass)" }}>★ Your league</span>}
                   </span>
                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{leagueTags(l)}</span>
-                  <span className="text-xs font-semibold mt-1" style={{ color: "var(--sport)" }}>Open league →</span>
+                  <span className="text-xs font-semibold mt-1" style={{ color: "var(--sport)" }}>{targetsPage ? "See trade targets →" : "Open league →"}</span>
                 </a>
               ))}
             </div>
@@ -4863,15 +4876,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
         </>
       ) : (
         <>
-          {leagueView ? (
-            <a href={leagueLink(leagueId)} onClick={follow(() => goTo(leagueId))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
-              ← {raw?.league.league_id === leagueId ? raw.league.name : "League"}
-            </a>
-          ) : (
-            <a href={LEAGUES_HASH} onClick={follow(() => goTo(null))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
-              ← All leagues
-            </a>
-          )}
+          <a href={base} onClick={follow(() => goTo(null))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
+            ← All leagues
+          </a>
 
           {status.state === "loading" && <p className="text-sm py-3" style={{ color: "var(--text-muted)" }}>Loading league from Sleeper…</p>}
           {status.state === "error" && (
@@ -4883,13 +4890,16 @@ function MyLeagues({ settings, setSettings, navigate }) {
           {status.state === "ready" && raw && team && leagueView === LEAGUE_TRADES && (
         <>
           <header>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Trade targets</h2>
-            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>{raw.league.name} · {leagueTags(raw.league)}</p>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>{raw.league.name}</h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+              Trade targets · {leagueTags(raw.league)} ·{" "}
+              <a href={`${LEAGUES_HASH}/${raw.league.league_id}`} className="underline" style={{ color: "var(--sport)" }}>League page →</a>
+            </p>
           </header>
           {!market ? (
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               Trade targets sort a dynasty league into buyers and sellers; this league is redraft. Your team's lineup
-              upgrades are on the league page.
+              upgrades are on the league page. Redraft trade targets are coming later.
             </p>
           ) : (
             <>
@@ -5133,8 +5143,8 @@ function MyLeagues({ settings, setSettings, navigate }) {
                 Every trade target in the league on one page, in two buckets: veterans to buy if you're competing, young
                 players to buy if you're rebuilding.
               </p>
-              <a href={`${leagueLink(leagueId)}/${LEAGUE_TRADES}`} onClick={follow(() => goTo(leagueId, LEAGUE_TRADES))}
-                className="pill self-start text-xs rounded-full px-3 py-1 font-medium">See all trade targets →</a>
+              <a href={`${TARGETS_HASH}/${leagueId}`} className="pill self-start text-xs rounded-full px-3 py-1 font-medium">
+                See all trade targets →</a>
             </ProfileSection>
           )}
 
@@ -8127,6 +8137,8 @@ const PAGES = [
     blurb: "Every player ranked by this week's projected points in your scoring, plus a start/sit call for tough lineup spots." },
   { key: "leagues", sport: "nfl", label: "My Leagues", short: "Boardroom", hash: "#/leagues", group: "Dynasty",
     blurb: "Your Sleeper leagues, each valued with its own settings and lineup, as dynasty or redraft: power rankings and where your team stands." },
+  { key: "targets", sport: "nfl", label: "Trade Targets", short: "Trade Block", hash: TARGETS_HASH, group: "Dynasty",
+    blurb: "Every player worth trading for in one of your dynasty leagues: veterans to buy if you're competing, young players if you're rebuilding." },
   { key: "draftboard", sport: "nfl", label: "Player Values", short: "War Room", hash: "#/draftboard", group: "Dynasty",
     blurb: "What every player and rookie pick is worth in your league's format, as a mock startup draft or a searchable list." },
   { key: "player", sport: "nfl", label: "Player Profile", short: "Player File", hash: "#/player/", hidden: true },
@@ -8171,6 +8183,7 @@ const PAGE_ICONS = {
   profile: <path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" />,
   board: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
   leagues: <path d="M3 8h18v12H3zM8 8V5h8v3M3 13h18" />,
+  target: <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 12h.01" />,
 };
 const PAGE_STYLE = {
   home: { hue: "var(--hue-blue)" },
@@ -8179,6 +8192,7 @@ const PAGE_STYLE = {
   injuries: { hue: "var(--hue-red)", icon: PAGE_ICONS.injuries },
   "nfl-rankings": { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
   leagues: { hue: "var(--hue-yellow)", icon: PAGE_ICONS.leagues },
+  targets: { hue: "var(--hue-red)", icon: PAGE_ICONS.target },
   draftboard: { hue: "var(--hue-aqua)", icon: PAGE_ICONS.draft },
   player: { hue: "var(--hue-blue)", icon: PAGE_ICONS.profile },
   trade: { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
@@ -8206,6 +8220,7 @@ function pageFromHash(hash) {
   if (hash.startsWith(PLAYER_HASH.nfl)) return "player";
   if (hash.startsWith(PLAYER_HASH.prospect)) return "prospect";
   if (hash.startsWith(`${LEAGUES_HASH}/`)) return "leagues";
+  if (hash.startsWith(`${TARGETS_HASH}/`)) return "targets";
   if (hash.startsWith(`${NBA_LEAGUES_HASH}/`)) return "nba-leagues";
   if (hash === VALUE_LIST_HASH) return "draftboard"; // the War Room's value list (the old Value Board)
   if (hash === "#/nba/projections") return "nba-rankings"; // the removed preseason-ADP rankings room
@@ -8967,6 +8982,7 @@ function App() {
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
         {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}
+        {page === "targets" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} targetsPage />}
         {page === "draftboard" && <DraftBoard data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "player" && <NflProfile dynasty={dynasty} settings={settings} />}
         {page === "trade" && <TradeCalculator data={dynasty} settings={settings} setSettings={setSettings} />}

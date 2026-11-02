@@ -562,8 +562,10 @@ position rooms and lineup, bench, power rankings and the settings table:
   a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
   just the weakest room to upgrade and the deepest to deal from. Your own team gets the same **Game plan** card under
   its lean.
-- **Buy low** (`buyLowTargets`, dynasty only), first in the trade targets on your team panel (up to four) and in
-  each strategy guide (up to three): young (25 and under), expensive (40%+ of the top value) players on other teams whose KTC value dropped 3%+
+- **Buy low** (`buyLowTargets`, dynasty only) targets lead the trade targets: first in each position group on your
+  team panel (the usual targets fill in behind, three per position), and first in each strategy guide (up to three of
+  its four cards). Only ones with a fair offer are shown. A rebuilder's usual targets must also be worth 30% of the top
+  value (`REBUILD_TARGET_MIN_SHARE`), not prospects far down the board. A buy-low is young (25 and under), expensive (40%+ of the top value) players on other teams whose KTC value dropped 3%+
   in 30 days while they score below their value, at least 4 spots (or 30% of their value rank) lower in points per
   game at their position than in value, over 3+ games. Points per game come from Sleeper's season stats
   (`useSeasonPpg`) in the league's own scoring. Players out long-term are left out (an injury discount, which trade

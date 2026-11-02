@@ -3116,7 +3116,8 @@ function teamLean(nowRank, futureRank, n, standing) {
 // - redraft, or a dynasty team in the mix: the most lineup value gained
 //   (the best lineup in the league's slots, before and after);
 // - a dynasty contender: the same, but on this season's (redraft) values;
-// - a dynasty rebuilder: young players (24 and under, no picks), and
+// - a dynasty rebuilder: young players (24 and under, no picks, worth
+//   REBUILD_TARGET_MIN_SHARE of the top value or more), and
 //   players 27 and under who are out for the season but back next year
 //   (bought while their value is down), paid for with veterans (26 and up),
 //   the bigger the age drop the better. A season-long injury counts as
@@ -3134,6 +3135,9 @@ const TARGETS_PER_ASSET = 3;
 const OFFER_POOL = 14; // the team's most valuable tradeable assets, offered alone or in pairs
 const SECOND_POOL = 8;  // the other team's players considered as a second piece
 const TARGET_MIN_VALUE = 500;
+// A rebuilder's targets are young players worth building around: at least
+// this share of the top value, not prospects far down the board.
+const REBUILD_TARGET_MIN_SHARE = 0.3;
 const TARGET_MIN_GAIN = 250; // lineup gain needed, or 10% of the target's value if more
 const PICK_AGE = 21; // a rookie pick counts as a 21-year-old when comparing ages
 const INJURED_MAX_AGE = 27;
@@ -3222,7 +3226,6 @@ const BUY_LOW_MAX_AGE = 25;
 const BUY_LOW_MIN_SHARE = 0.4;
 const BUY_LOW_MIN_DIP = 0.03;
 const BUY_LOW_MIN_GAP = 4;
-const BUY_LOW_COUNT = 4;
 function buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg) {
   if (!seasonPpg || mode !== "dynasty") return [];
   const slots = league.roster_positions;
@@ -3271,10 +3274,11 @@ function buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg) {
         const c = cost(give);
         if (!best || c < best.cost) best = { give, result, cost: c };
       }
+      if (!best) continue; // nothing on this roster is a fair price
       found.push({ player: p, partner: other, dip, gap, stat, offer: best, score: dip * p.value * Math.min(3, gap / Math.max(1, p.posRank)) });
     }
   }
-  return found.sort((a, b) => b.score - a.score).slice(0, BUY_LOW_COUNT);
+  return found.sort((a, b) => b.score - a.score);
 }
 
 // One buy-low target: why the price is down, and a fair offer for him.
@@ -3415,7 +3419,7 @@ function suggestTrades(team, teams, league, rows, mode, leanOf, outForYear = new
     const theirBase = lineupOf(other.assets);
     const otherWindow = windowFit(other);
     for (const p of other.assets) {
-      if (p.value < TARGET_MIN_VALUE) continue;
+      if (p.value < TARGET_MIN_VALUE || (rebuild && p.value < ctx.topValue * REBUILD_TARGET_MIN_SHARE)) continue;
       const injured = rebuild && outForYear.has(p.id) && (p.age ?? 99) <= INJURED_MAX_AGE;
       if (p.position === "PICK" || (rebuild && !injured && !(p.age && p.age <= 24))) continue;
       if (!rebuild && outForYear.has(p.id)) continue; // no help to this season's lineup
@@ -4433,7 +4437,8 @@ function GamePlan({ plan, isDynasty }) {
   );
 }
 
-const GUIDE_TARGETS = 3;
+const GUIDE_TARGETS = 3; // buy-low targets, at most
+const GUIDE_CARDS = 4;   // cards in all, buy-low first
 // A team's strategy guide in the power rankings: where it stands, its game
 // plan, and its best few trade targets (suggestTrades, worked out on open).
 function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing, outForYear, sleeperPlayers, seasonPpg, onView, onOpen }) {
@@ -4441,9 +4446,10 @@ function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing
   const lean = leanOf(team);
   const plan = teamGamePlan(team, teams, { isDynasty, lean, leanOf, ranks, outForYear });
   const targets = useMemo(() => suggestTrades(team, teams, league, rows, mode, leanOf, outForYear), [team, teams, league, rows, mode, outForYear]);
+  // Buy-low targets first, then the usual ones.
   const buyLows = useMemo(() => buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg).slice(0, GUIDE_TARGETS),
     [team, teams, league, rows, mode, seasonPpg]);
-  const best = [...targets.list].sort((a, b) => b.score - a.score).slice(0, GUIDE_TARGETS);
+  const best = [...targets.list].sort((a, b) => b.score - a.score);
   const n = teams.length;
   const where = [
     isDynasty && `${ordinal(ranks.total[team.rosterId])} of ${n} in roster value`,
@@ -4464,32 +4470,17 @@ function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
           Trade targets{targets.rebuild ? " · youth for veterans" : " · lineup upgrades"}{buyLows.length > 0 ? " · buy low" : ""}
         </span>
-        {buyLows.length > 0 && (
-          <>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              <span className="font-semibold" style={{ color: "var(--series-red)" }}>▼ Buy low</span> · young, expensive players whose price dipped
-            </span>
-            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {buyLows.map((b) => <BuyLowCard key={b.player.id} b={b} onView={onView} onOpen={onOpen} sleeperPlayers={sleeperPlayers} />)}
-            </ul>
-          </>
-        )}
-        {best.length === 0 ? (
+        {best.length === 0 && buyLows.length === 0 ? (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair trades found for what {team.name} can offer.</p>
         ) : (
-          <>
-            {buyLows.length > 0 && (
-              <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                {targets.rebuild ? "Youth for veterans" : "Lineup upgrades"}
-              </span>
-            )}
-            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {best.map((s) => (
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {buyLows.map((b) => <BuyLowCard key={b.player.id} b={b} onView={onView} onOpen={onOpen} sleeperPlayers={sleeperPlayers} />)}
+            {best.filter((s) => !buyLows.some((b) => b.player.id === s.get[0].id)).slice(0, GUIDE_CARDS - buyLows.length)
+              .map((s) => (
                 <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets} forName={team.name}
                   sleeperPlayers={sleeperPlayers} onView={onView} onOpen={onOpen} />
               ))}
-            </ul>
-          </>
+          </ul>
         )}
       </div>
     </div>
@@ -4863,28 +4854,18 @@ function MyLeagues({ settings, setSettings, navigate }) {
                   Deals built around the other team: each offer from {team === myTeam ? "your" : `${team.name}'s`} roster fills one
                   of their weak spots (or brings a rebuilder youth and picks, or upgrades a contender's lineup), for a player
                   from a position where they have plenty. Every offer is fair, or a slight overpay, by this app's trade formula.
+                  {buyLows.length > 0 && <> <span style={{ color: "var(--series-red)" }}>▼ Buy low</span> targets come first: young,
+                    expensive players whose price dipped on a slow stretch.</>}
                 </p>
-                {buyLows.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <h4 className="text-sm font-semibold flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--series-red)" }}>▼ Buy low</span>
-                      <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>
-                        Young, expensive players whose price dipped on a slow stretch
-                      </span>
-                    </h4>
-                    <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {buyLows.map((b) => (
-                        <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {targets.list.length === 0 ? (
+                {targets.list.length === 0 && buyLows.length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                     No fair upgrades found: nobody available would improve this lineup for what {team === myTeam ? "you" : "they"} can offer.
                   </p>
                 ) : targets.positions.map(({ pos, rank }) => {
-                  const group = targets.list.filter((s) => s.get[0].position === pos);
+                  // Buy-low targets lead each position; the usual targets fill in behind them.
+                  const lows = buyLows.filter((b) => b.player.position === pos).slice(0, TARGETS_PER_POSITION);
+                  const group = targets.list.filter((s) => s.get[0].position === pos && !lows.some((b) => b.player.id === s.get[0].id))
+                    .slice(0, TARGETS_PER_POSITION - lows.length);
                   return (
                   <div key={pos} className="flex flex-col gap-2">
                     <h4 className="text-sm font-semibold flex items-center gap-2">
@@ -4893,10 +4874,13 @@ function MyLeagues({ settings, setSettings, navigate }) {
                         {team === myTeam ? "Your" : `${team.name}'s`} room is {ordinal(rank)} of {targets.n}
                       </span>
                     </h4>
-                    {group.length === 0 ? (
+                    {group.length === 0 && lows.length === 0 ? (
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair {pos} targets found.</p>
                     ) : (
                   <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {lows.map((b) => (
+                      <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
+                    ))}
                     {group.map((s) => (
                       <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets}
                         forName={team === myTeam ? "you" : team.name} sleeperPlayers={sleeperPlayers} onView={viewTeam} onOpen={openTrade} />

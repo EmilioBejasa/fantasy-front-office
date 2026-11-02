@@ -562,6 +562,12 @@ position rooms and lineup, bench, power rankings and the settings table:
   a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
   just the weakest room to upgrade and the deepest to deal from. Your own team gets the same **Game plan** card under
   its lean.
+- **Trade market** (`tradeMarket`, dynasty only, between the standings and the power rankings): for each position,
+  who's worth buying league-wide, from the teams most likely to sell. **If you're competing**: veterans (26 and up)
+  on rebuilding teams who score like starters (top 1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game,
+  `MARKET_STARTERS`), by points per game. **If you're rebuilding**: players 24 and under worth 30%+ of the top value on
+  contending teams, bench players and buy-lows (▼) first, then by value. Up to four a side; your own players and
+  anyone out long-term are left out; team names open that team's dropdown.
 - **Buy low** (`buyLowTargets`, dynasty only) targets lead the trade targets: first in each position group on your
   team panel (the usual targets fill in behind, three per position), and first in each strategy guide (up to three of
   its four cards). Only ones with a fair offer are shown. A rebuilder's usual targets must also be worth 30% of the top

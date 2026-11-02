@@ -607,10 +607,10 @@ const samplePlayers = [
 // existed for it. This isn't split by week; it's a single always-current
 // list — replace it wholesale with the latest real targets as the season
 // moves on, rather than piling up a new dated list every week.
-const WAIVER_TARGETS_UPDATED_ON = "2026-10-27";
+const WAIVER_TARGETS_UPDATED_ON = "2026-11-02";
 // The week these are pickups for. The page warns once Sleeper's current week
 // moves past it, so a list that hasn't been rebuilt doesn't pass as current.
-const WAIVER_TARGETS_WEEK = 8;
+const WAIVER_TARGETS_WEEK = 9;
 const WAIVER_PRIORITIES = ["Must Add", "Speculative", "Streamer", "Deep League"];
 const WAIVER_PRIORITY_COLOR = {
   "Must Add": "var(--series-red)",
@@ -618,46 +618,40 @@ const WAIVER_PRIORITY_COLOR = {
   "Streamer": "var(--series-blue)",
   "Deep League": "var(--text-muted)",
 };
-// Current as of Week 7's results and injury news (2026-10-27): pickups for
-// Week 8 that Week 4-7 usage, Sleeper's injury designations (Breece Hall,
-// Lamar Jackson, DeVonta Smith, Jeremiyah Love, Emeka Egbuka and Zach
-// Charbonnet out; Jadarian Price on IR) and Sleeper's most-added list point
-// to. HOU, NO, NYG and SF are on bye in Week 8, so none of their players are here.
+// Current as of Week 8's Sunday results (2026-11-02; Monday night's game isn't
+// in yet): pickups for Week 9 that Week 5-8 usage, Sleeper's injury
+// designations (Breece Hall and Hunter Henry out; RJ Harvey, James Conner and
+// Trey Benson on IR) and Sleeper's most-added list point to. Points are half
+// PPR. PIT and TEN are on bye in Week 9, so none of their players are here.
 const WAIVER_TARGETS = [
-  { id: "caleb-douglas", name: "Caleb Douglas", team: "MIA", position: "WR", priority: "Must Add",
-    note: "Back in Week 7 after missing Weeks 3-6, with 21.0 points on 68% of snaps. By far the most-added player on Sleeper." },
-  { id: "concepcion", name: "KC Concepcion Jr.", team: "CLE", position: "WR", priority: "Must Add",
-    note: "23.2 points on 10 targets in Week 7, playing 79% of snaps. He's drawn 6+ targets in three of the last four games." },
-  { id: "lemon", name: "Makai Lemon", team: "PHI", position: "WR", priority: "Must Add",
-    note: "DeVonta Smith is out (hamstring). Lemon played 91% of snaps in Week 7, with 8 targets and 19.7 points, and has 74%+ of snaps every week since Week 4." },
-  { id: "sl-11435", name: "Emanuel Wilson", team: "SEA", position: "RB", priority: "Must Add",
-    note: "Charbonnet is out (ACL) and Jadarian Price is on IR. Wilson had 24 carries and 18.5 points in Week 7, and 20+ carries in two of the last three games." },
-  { id: "tucker-tre", name: "Tre Tucker", team: "LV", position: "WR", priority: "Must Add",
-    note: "12 targets and 21.3 points in Week 7 on 82% of snaps, after 26.7 points the week before. Two straight weeks as a WR1." },
-  { id: "coleman-jonah", name: "Jonah Coleman", team: "DEN", position: "RB", priority: "Speculative",
-    note: "Back from IR in Week 7 with 9 carries and 8.9 points on 49% of snaps. A rookie splitting work, with room to grow." },
-  { id: "sl-8122", name: "Zonovan Knight", team: "ARI", position: "RB", priority: "Speculative",
-    note: "Jeremiyah Love is out (ankle). Knight has played 44-53% of snaps the last two weeks, with 15 carries in Week 6 and 5 targets in Week 7." },
-  { id: "sampson-dylan", name: "Dylan Sampson", team: "CLE", position: "RB", priority: "Speculative",
-    note: "Back from IR in Week 7 with 10.7 points on 46% of snaps, behind Judkins' 17 carries. A handcuff with a real role." },
-  { id: "sl-7083", name: "Tyler Huntley", team: "BAL", position: "QB", priority: "Streamer",
-    note: "Starting with Lamar Jackson out (ankle): 24.0, 13.4 and 16.1 points in his last three starts, with 3-6 rushes a game. At BUF in Week 8." },
+  { id: "allgeier", name: "Tyler Allgeier", team: "ARI", position: "RB", priority: "Must Add",
+    note: "33.6 points in Week 8 on 11 carries and 5 targets, with James Conner and Trey Benson on IR. 59% of snaps, his most this season. At SEA." },
+  { id: "mitchell-adonai", name: "Adonai Mitchell", team: "NYJ", position: "WR", priority: "Must Add",
+    note: "23.7 points on 9 targets in Week 8, his first big game since coming back in Week 7. 61% of snaps. Among Sleeper's most-added players." },
+  { id: "allen-braelon", name: "Braelon Allen", team: "NYJ", position: "RB", priority: "Must Add",
+    note: "Breece Hall is out (quadriceps). Allen has played 78-87% of snaps four weeks running, with 17-24 carries and 11.4+ points each week." },
+  { id: "coleman-jonah", name: "Jonah Coleman", team: "DEN", position: "RB", priority: "Must Add",
+    note: "RJ Harvey is on IR until Week 13. Coleman led the backfield in Week 8: 66% of snaps, 11 carries, 5 targets, 18.4 points. At CAR." },
+  { id: "johnson-emmett", name: "Emmett Johnson", team: "KC", position: "RB", priority: "Speculative",
+    note: "22.8 points in Week 8 on only 19% of snaps (5 targets). A big-play rookie in a part-time role; worth a bench spot, not a start yet." },
+  { id: "washington-mike", name: "Mike Washington Jr.", team: "LV", position: "RB", priority: "Speculative",
+    note: "25 carries on 60% of snaps in Week 8, by far his biggest workload. Ashton Jeanty played 40%. At SF." },
   { id: "sl-1166", name: "Kirk Cousins", team: "LV", position: "QB", priority: "Streamer",
-    note: "19.5+ points in three of the last four games (23.6, 13.7, 19.5, 20.4). At NYJ in Week 8." },
+    note: "28.2 points in Week 8, and 19.5+ in three straight games (19.5, 20.4, 28.2). At SF." },
+  { id: "sl-1373", name: "Geno Smith", team: "NYJ", position: "QB", priority: "Streamer",
+    note: "24.5 and 19.0 points the last two weeks, with Adonai Mitchell and Garrett Wilson both involved. At KC." },
   { id: "willis-malik", name: "Malik Willis", team: "MIA", position: "QB", priority: "Streamer",
-    note: "26.0 points in Week 7 and 20.9 in Week 5, with 8 rushes in each. Hosts NE in Week 8." },
-  { id: "henry-hunter", name: "Hunter Henry", team: "NE", position: "TE", priority: "Streamer",
-    note: "11+ points four weeks running (11.2, 13.4, 14.8, 14.1) on 64-76% of snaps." },
-  { id: "pitts", name: "Kyle Pitts Sr.", team: "ATL", position: "TE", priority: "Streamer",
-    note: "13.2, 23.0 and 15.2 points the last three weeks on 5-7 targets a game. At TB in Week 8." },
-  { id: "sl-12498", name: "Mason Taylor", team: "NYJ", position: "TE", priority: "Streamer",
-    note: "25.2 points in Week 7 and 6 targets in each of the last two games, on 55-63% of snaps. Hosts LV." },
+    note: "15.6+ points in all three of his starts (20.9, 26.0, 15.6), with 8 rushes in two of them. Hosts DET." },
+  { id: "sl-4993", name: "Mike Gesicki", team: "CIN", position: "TE", priority: "Streamer",
+    note: "15.6 points on 6 targets in Week 8, playing 68% of snaps (up from 38-45%). Joe Burrow threw for 42.5 points. At ATL." },
   { id: "flournoy", name: "Ryan Flournoy", team: "DAL", position: "WR", priority: "Deep League",
-    note: "68-87% of snaps every week since Week 4, with 11.0+ points in three of them." },
-  { id: "sl-12485", name: "Tez Johnson", team: "TB", position: "WR", priority: "Deep League",
-    note: "Emeka Egbuka is out (concussion). Johnson's snaps jumped to 65% in Week 7 (12.7 points)." },
-  { id: "sl-13150", name: "Darius Cooper", team: "PHI", position: "WR", priority: "Deep League",
-    note: "92% of snaps in Week 7 with Smith out, though only 3 targets. 18.3 and 15.1 points in Weeks 4-5." },
+    note: "68-87% of snaps every week since Week 4, and 9.0+ points in each of the last four games. At IND." },
+  { id: "sl-9501", name: "DeMario Douglas", team: "NE", position: "WR", priority: "Deep League",
+    note: "15.1+ points in three of the last four weeks (20.5, 16.1, 15.1) on 49-65% of snaps. Hosts GB." },
+  { id: "washington-malik", name: "Malik Washington", team: "MIA", position: "WR", priority: "Deep League",
+    note: "74-80% of snaps whenever he's played, with 6+ targets in two of his last three games. 12.5 points in Week 8. Hosts DET." },
+  { id: "gainwell", name: "Kenneth Gainwell", team: "TB", position: "RB", priority: "Deep League",
+    note: "25 carries in Week 8 (14.0 points) on 50% of snaps, splitting the work with Bucky Irving. At CHI." },
 ];
 
 /* ---------------- weekly scores ---------------- */

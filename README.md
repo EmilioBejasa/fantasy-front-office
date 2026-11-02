@@ -554,6 +554,14 @@ position rooms and lineup, bench, power rankings and the settings table:
   still start.
 - **Other teams open as dropdowns** in the power rankings (`RosterBreakdown`): click a team to see its QB, RB, WR
   and TE (best first) and, in dynasty, its picks, each with value, age and injury tag. Several can be open at once.
+  Above the roster, a **strategy guide** (`TeamStrategy`) shows the team's lean, roster/lineup ranks and playoff odds,
+  its game plan (`teamGamePlan`) and its three best trade targets (`suggestTrades`, worked out when opened). The game
+  plan follows the lean: a contender **gains production** (upgrade its weakest rooms, pay with picks and young
+  players who don't start, partners are the rebuilding teams); a rebuilder **sheds points** (sell veterans at or past
+  `SELL_AGE` for their position, QB 31, RB 26, WR 28, TE 29, to the contenders, and build around players 24 and under);
+  a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
+  just the weakest room to upgrade and the deepest to deal from. Your own team gets the same **Game plan** card under
+  its lean.
   Team names in the standings and trade ideas open (and scroll to) that team's dropdown. The panel up top is always
   your team; opened by league ID with no Sleeper user, a **Your team** menu picks which one that is.
 - **Trade targets** (`suggestTrades`) suggest deals for whichever team is shown, grouped by position (QB, RB, WR, TE) with up to three per position, weakest room first. Each deal is a player on another

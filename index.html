@@ -4994,15 +4994,6 @@ function MyLeagues({ settings, setSettings, navigate }) {
               </p>
             )}
 
-            {(() => {
-              const plan = teamGamePlan(team, teams, { isDynasty, lean: leanOf(team), leanOf, ranks, outForYear });
-              return (
-                <ProfileSection title="Game plan" aside={plan.focus}>
-                  <GamePlan plan={plan} isDynasty={isDynasty} />
-                </ProfileSection>
-              );
-            })()}
-
             {targets && (
               <ProfileSection title="Trade targets" aside="Biggest lineup upgrades">
                 <p className="text-xs -mt-1" style={{ color: "var(--text-muted)" }}>

@@ -381,7 +381,7 @@ Weekly Scores.
 **The site keeps it current from Sleeper** (`mergeInjuredList`): anyone in
 the pool Sleeper lists on IR or PUP who isn't in `INJURED_RESERVE` yet is
 added (marked *from Sleeper*, starting the week after his last game, and out
-for the season if the injury is a torn ACL or Achilles), and hand-kept
+for the season if the injury is a torn ACL, Achilles, patellar tendon or Lisfranc), and hand-kept
 entries Sleeper shows as active again are dropped (season-ending ones stay).
 So the hand list only needs editing to add details Sleeper doesn't have: a
 better injury description, a stint's real start week, or a season-ending
@@ -594,7 +594,7 @@ position rooms and lineup, bench, power rankings and the settings table:
       injured player counts as three extra years of age drop, since this season is all a rebuilder gives up. A player
       counts as out for the season if:
       - `INJURED_RESERVE` marks them `seasonEnding`, or
-      - Sleeper has them on IR/PUP with an ACL or Achilles injury (`outForYearIds`).
+      - Sleeper has them on IR/PUP with an ACL, Achilles, patellar tendon or Lisfranc injury (`outForYearIds`).
 
       Low redraft value alone isn't used, because rookies on short IR stints have it too. These players are never
       suggested to other teams as lineup upgrades.
@@ -635,7 +635,7 @@ position rooms and lineup, bench, power rankings and the settings table:
     projected max PF;
   - a week already under way uses the lineups actually set, with points already scored in place of projections;
   - players out for the season score nothing (`seasonOverIds`: season-ending entries in `INJURED_RESERVE`, plus
-    Sleeper IR/PUP players with a torn ACL or Achilles). Sleeper's weekly projections sit out the four-game IR
+    Sleeper IR/PUP players with a torn ACL, Achilles, patellar tendon or Lisfranc). Sleeper's weekly projections sit out the four-game IR
     minimum, then bring every player back, season-ending or not;
   - 2,000 seasons are simulated (each team-week drawn around its projection, 18% as one standard deviation) for the
     average record, PF and PA, playoff odds and 1-seed odds. Median leagues get the extra game vs the median. Seeds

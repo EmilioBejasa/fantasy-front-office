@@ -184,7 +184,7 @@ test("withCurrentTeams: a traded player takes Sleeper's team, others are left as
 });
 
 test("SEASON_ENDING_INJURY reads Sleeper's injury text", () => {
-  for (const t of ["Knee - ACL", "Torn ACL", "Achilles"]) assert.ok(app.SEASON_ENDING_INJURY.test(t), t);
+  for (const t of ["Knee - ACL", "Torn ACL", "Achilles", "Knee - Patellar Tendon", "Foot - Lisfranc"]) assert.ok(app.SEASON_ENDING_INJURY.test(t), t);
   for (const t of ["Hamstring", "Knee - MCL", "Placement"]) assert.ok(!app.SEASON_ENDING_INJURY.test(t), t);
 });
 

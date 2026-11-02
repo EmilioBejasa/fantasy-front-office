@@ -724,7 +724,7 @@ const INJURED_RESERVE = [
   { id: "sl-8168", list: "IR", injury: "Ankle", sinceWeek: 6 },
   { id: "sl-8188", list: "IR", injury: "Ankle (dislocation, surgery; out 12-16 weeks)", sinceWeek: 5 },
   { id: "sl-8195", list: "IR", injury: "Calf", sinceWeek: 3 },
-  { id: "mclaurin", list: "IR", injury: "Torn patellar tendon (surgery)", sinceWeek: 9, seasonEnding: true },
+  { id: "mclaurin", list: "IR", injury: "Torn patellar tendon (surgery)", sinceWeek: 7, seasonEnding: true },
   { id: "sl-6826", list: "IR", injury: "Knee", sinceWeek: 8, seasonEnding: true },
   { id: "jaylin-noel", list: "IR", injury: "Turf toe (surgery)", sinceWeek: 8, seasonEnding: true },
   { id: "harvey-rj", list: "IR", injury: "Knee", sinceWeek: 8 },
@@ -738,7 +738,7 @@ const ACTIVE_AGAIN = [null, undefined, ""]; // Sleeper's status for a player who
 
 // The IR lists the site shows: INJURED_RESERVE, plus anyone in the pool
 // Sleeper has on IR or PUP who isn't in it yet (`auto`, starting the week
-// after his last game, out for the season if it's a torn ACL or Achilles),
+// after his last game, out for the season if it's a torn ACL, Achilles, patellar tendon or Lisfranc),
 // minus hand-kept entries Sleeper shows as active again. Until Sleeper's
 // list loads, it's INJURED_RESERVE as is.
 function mergeInjuredList({ pool, scores, sleeperPlayers, resolve }) {
@@ -3141,11 +3141,11 @@ const PICK_AGE = 21; // a rookie pick counts as a 21-year-old when comparing age
 const INJURED_MAX_AGE = 27;
 const INJURED_BONUS_YEARS = 3;
 // Injuries that end a season, read from Sleeper's injury body part ("Knee - ACL").
-const SEASON_ENDING_INJURY = /\bACL\b|Achilles/i;
+const SEASON_ENDING_INJURY = /\bACL\b|Achilles|Patellar|Lisfranc/i;
 
 // Sleeper ids of players out for the season who should be back next year:
 // season-ending entries in the hand-kept INJURED_RESERVE list, plus anyone
-// Sleeper has on IR or PUP with a torn ACL or Achilles. (Low redraft value
+// Sleeper has on IR or PUP with a torn ACL, Achilles, patellar tendon or Lisfranc. (Low redraft value
 // alone isn't a sign: rookies on short IR stints have that too.)
 function outForYearIds(rows, sleeperPlayers, resolve) {
   const ids = new Set();
@@ -3759,7 +3759,7 @@ function winOdds(a, b) {
 
 // Sleeper ids of players out for the season: season-ending entries in the
 // hand-kept INJURED_RESERVE list, plus anyone Sleeper has on IR or PUP with a
-// torn ACL or Achilles.
+// torn ACL, Achilles, patellar tendon or Lisfranc.
 function seasonOverIds(sleeperPlayers, resolve) {
   const ids = new Set();
   for (const r of INJURED_RESERVE) {

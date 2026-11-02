@@ -8,6 +8,12 @@ on:
     # 10:00 UTC daily (~6am ET), after every night's games have finished,
     # so Thursday, Sunday and Monday games plus stat corrections are picked up.
     - cron: "0 10 * * *"
+    # Game-night runs so Sunday and Monday scores land the same night instead
+    # of waiting for the morning run (GitHub often starts schedules hours late).
+    # 01:00 UTC Monday (~8pm ET Sunday), after the late-afternoon games.
+    - cron: "0 1 * * 1"
+    # 04:45 UTC Monday and Tuesday (~11:45pm ET), after Sunday and Monday night.
+    - cron: "45 4 * * 1,2"
   workflow_dispatch:
 
 permissions:

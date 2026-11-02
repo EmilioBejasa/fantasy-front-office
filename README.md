@@ -563,10 +563,12 @@ position rooms and lineup, bench, power rankings and the settings table:
   just the weakest room to upgrade and the deepest to deal from.
 - **Trade Block** (its own tab under Dynasty, `#/targets`, `TradeBlock` and `tradeBlock`): no league needed. It
   uses the War Room's dynasty values in the format picked on the page (QB, teams, scoring, TE premium), split by
-  position into two buckets. **If you're competing**: veterans (26 and up) worth 10%+ more this season (redraft
-  value) than in dynasty, so a rebuilder sells them at a dynasty price, by this season's value; anyone out long-term
-  is left out. **If you're rebuilding**: players 24 and under worth 30%+ of the top value, plus players 27 and under
-  out for the year but back next season (`outForYearIds`), with buy-lows (▼, down 3%+ in 30 days) ranked higher.
+  position into two buckets. **If you're competing**: veterans (26 and up) scoring like starters this season (top
+  1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game, `TRADE_BLOCK_STARTERS`, from Sleeper's season stats in
+  the scoring picked, via `useSeasonPpg`) and worth at least as much this season (redraft value) as in dynasty, so a
+  rebuilder sells them at a dynasty price, by points per game; anyone out long-term is left out. Until the stats
+  load, it's veterans worth 10%+ more this season than in dynasty, by redraft value. **If you're rebuilding**: players 24 and under worth 30%+ of the top value, plus players 27 and under
+  out for the year but back next season (`outForYearIds`), with buy-lows (▼, `buyLowSignal`: down 3%+ in 30 days and scoring well below their value rank) ranked higher; rows show points per game.
   Up to ten per position (`TRADE_BLOCK_PER_POSITION`). In dynasty leagues, the league page's team panel no longer
   lists trade targets; this tab does instead.
 - **Buy low** (`buyLowTargets`, dynasty only) targets come first in each strategy guide (up to three of its four

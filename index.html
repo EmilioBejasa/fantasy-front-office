@@ -3168,15 +3168,16 @@ const lineupTotal = (assets, slots, val) =>
     .reduce((s, l) => s + (l.player?.value || 0), 0);
 const avgAge = (assets) => sumOf(assets.map((a) => (a.position === "PICK" ? PICK_AGE : a.age ?? 26))) / assets.length;
 
-// This season's points per game for every QB/RB/WR/TE, in the league's own
-// scoring (Sleeper's season totals carry the bonus stats too), and each
+// A season's points per game for every QB/RB/WR/TE, scored by
+// `points(stats, position)` (a league's own scoring, or the Trade Block's
+// PPR setting; Sleeper's season totals carry the bonus stats too), and each
 // player's rank by it at his position among those with BUY_LOW_MIN_GAMES
-// games. { [sleeperId]: { ppg, gp, rank } }; null until it loads.
+// games. { [sleeperId]: { ppg, gp, rank } }; null until it loads. Keep
+// `points` stable (useMemo) so it isn't recomputed every render.
 const BUY_LOW_MIN_GAMES = 3;
 const seasonStatsCache = new Map();
-function useSeasonPpg(league) {
+function useSeasonPpg(season, points) {
   const [stats, setStats] = useState(null);
-  const season = league?.season;
   useEffect(() => {
     if (!season) return;
     let cancelled = false;
@@ -3191,19 +3192,18 @@ function useSeasonPpg(league) {
     return () => { cancelled = true; };
   }, [season]);
   return useMemo(() => {
-    if (!stats || !league) return null;
-    const scoring = league.scoring_settings || {};
+    if (!stats || !points) return null;
     const out = {};
     const byPos = {};
     for (const r of stats) {
       const gp = r.stats?.gp || 0;
       if (!gp) continue;
-      out[r.player_id] = { ppg: scoreStats(r.stats, scoring) / gp, gp, rank: null };
+      out[r.player_id] = { ppg: points(r.stats, r.player?.position) / gp, gp, rank: null };
       if (gp >= BUY_LOW_MIN_GAMES) (byPos[r.player?.position] ||= []).push(r.player_id);
     }
     for (const ids of Object.values(byPos)) ids.sort((a, b) => out[b].ppg - out[a].ppg).forEach((id, i) => { out[id].rank = i + 1; });
     return out;
-  }, [stats, league]);
+  }, [stats, points]);
 }
 
 // Buy-low targets: young, expensive players on other teams whose market value
@@ -3291,36 +3291,46 @@ function buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg) {
 // The Trade Block: players worth trading for in any dynasty league, by
 // position, in the format picked (no league needed).
 // - Win-now buys (for contenders): veterans (TRADE_BLOCK_VET_AGE and up)
-//   worth TRADE_BLOCK_NOW_EDGE more this season (redraft value) than in
-//   dynasty, so a rebuilder sells them cheap; by this season's value.
+//   scoring like starters this season (top TRADE_BLOCK_STARTERS × teams at
+//   their position in points per game), worth at least as much this season
+//   (redraft value) as in dynasty, so a rebuilder sells them cheap; by points
+//   per game. Until the season's stats load: veterans worth
+//   TRADE_BLOCK_NOW_EDGE more this season than in dynasty, by redraft value.
 // - Youth buys (for rebuilders): players 24 and under worth
 //   REBUILD_TARGET_MIN_SHARE of the top value or more, and players 27 and
 //   under out for the season but back next year (bought while their value is
-//   down). Buy-lows (down BUY_LOW_MIN_DIP or more in 30 days) rank higher.
+//   down). Buy-lows (buyLowSignal: down in price and scoring below their
+//   value) rank higher.
 // Players out long-term are left out of the win-now list (they add nothing
 // this season).
 const TRADE_BLOCK_PER_POSITION = 10;
 const TRADE_BLOCK_VET_AGE = 26;
 const TRADE_BLOCK_NOW_EDGE = 1.1;
 const TRADE_BLOCK_MIN_VALUE = 1500;
-function tradeBlock(rows, sidelined, outForYear) {
+const TRADE_BLOCK_STARTERS = { QB: 1.5, RB: 2.5, WR: 3.5, TE: 1.5 };
+function tradeBlock(rows, sidelined, outForYear, seasonPpg = null, teams = 12) {
   const topValue = rows[0]?.value || 1;
   const players = rows.filter((r) => r.position !== "PICK");
+  const ppgOf = (r) => (seasonPpg?.[r.id]?.rank ? seasonPpg[r.id] : null);
   return ROOM_POSITIONS.map((pos) => {
     const atPos = players.filter((r) => r.position === pos);
-    const winNow = atPos
-      .filter((r) => (r.age ?? 0) >= TRADE_BLOCK_VET_AGE && r.value >= TRADE_BLOCK_MIN_VALUE && r.redraftValue != null
-        && r.redraftValue >= r.value * TRADE_BLOCK_NOW_EDGE && !sidelined(r)?.longTerm)
-      .sort((a, b) => b.redraftValue - a.redraftValue)
+    const vets = atPos.filter((r) => (r.age ?? 0) >= TRADE_BLOCK_VET_AGE && r.redraftValue != null && !sidelined(r)?.longTerm);
+    const winNow = (seasonPpg
+      ? vets.map((r) => ({ ...r, stat: ppgOf(r) }))
+        .filter((r) => r.stat && r.stat.rank <= Math.round(teams * TRADE_BLOCK_STARTERS[pos]) && r.redraftValue >= r.value)
+        .sort((a, b) => b.stat.ppg - a.stat.ppg)
+      : vets.filter((r) => r.value >= TRADE_BLOCK_MIN_VALUE && r.redraftValue >= r.value * TRADE_BLOCK_NOW_EDGE)
+        .sort((a, b) => b.redraftValue - a.redraftValue))
       .slice(0, TRADE_BLOCK_PER_POSITION);
     const youth = atPos
       .filter((r) => ((r.age ?? 99) <= 24 && r.value >= topValue * REBUILD_TARGET_MIN_SHARE)
         || (outForYear.has(r.id) && (r.age ?? 99) <= INJURED_MAX_AGE && r.value >= TRADE_BLOCK_MIN_VALUE))
       .map((r) => {
         const dip = dipOf(r);
-        const buyLow = dip >= BUY_LOW_MIN_DIP;
+        // With stats, a buy-low is the full test (down in price and scoring below its value).
+        const buyLow = seasonPpg ? !!buyLowSignal(r, {}, topValue, seasonPpg) : dip >= BUY_LOW_MIN_DIP;
         const injured = outForYear.has(r.id);
-        return { ...r, dip, buyLow, injured, score: r.value * (buyLow ? 1 + 3 * dip : 1) * (injured ? 1.2 : 1) };
+        return { ...r, stat: ppgOf(r), dip, buyLow, injured, score: r.value * (buyLow ? 1 + 3 * dip : 1) * (injured ? 1.2 : 1) };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, TRADE_BLOCK_PER_POSITION);
@@ -3333,9 +3343,16 @@ function TradeBlock({ data, settings, setSettings }) {
   const sleeperPlayers = useSleeperStatuses();
   const seasonOver = useMemo(() => seasonOverIds(sleeperPlayers, resolve), [sleeperPlayers, resolve]);
   const outForYear = useMemo(() => outForYearIds(data.rows, sleeperPlayers, resolve), [data.rows, sleeperPlayers, resolve]);
+  // This season's points per game in the picked scoring (PPR / half / standard, plus TE premium).
+  const [season, setSeason] = useState(null);
+  useEffect(() => {
+    sleeperGet("/state/nfl").then((st) => setSeason(st?.season || null)).catch(() => setSeason(String(new Date().getFullYear())));
+  }, []);
+  const points = useMemo(() => (stats, position) => projectedPoints(stats, position, settings), [settings.ppr, settings.tep]);
+  const seasonPpg = useSeasonPpg(season, points);
   const block = useMemo(
-    () => tradeBlock(data.rows, (r) => sidelinedReason(r, sleeperPlayers, seasonOver), outForYear),
-    [data.rows, sleeperPlayers, seasonOver, outForYear]
+    () => tradeBlock(data.rows, (r) => sidelinedReason(r, sleeperPlayers, seasonOver), outForYear, seasonPpg, settings.teams),
+    [data.rows, sleeperPlayers, seasonOver, outForYear, seasonPpg, settings.teams]
   );
   const row = (r, win) => (
     <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
@@ -3348,9 +3365,12 @@ function TradeBlock({ data, settings, setSettings }) {
         {r.injured && <span className="text-xs font-semibold" style={{ color: "var(--series-red)" }}> Out for year</span>}
       </span>
       <span className="text-xs tabular-nums shrink-0 text-right" style={{ color: "var(--text-secondary)" }}>
-        {win ? <>{fmtValue(r.redraftValue)} now</> : fmtValue(r.value)}
+        {win && r.stat ? `${r.stat.ppg.toFixed(1)} PPG` : win ? <>{fmtValue(r.redraftValue)} now</> : fmtValue(r.value)}
         <span className="block" style={{ color: "var(--text-muted)" }}>
-          {win ? `${fmtValue(r.value)} dynasty` : r.redraftValue != null ? `${fmtValue(r.redraftValue)} now` : ""}
+          {win && r.stat ? `${ordinal(r.stat.rank)} ${r.position} · ${fmtValue(r.value)}`
+            : win ? `${fmtValue(r.value)} dynasty`
+            : r.stat ? `${r.stat.ppg.toFixed(1)} PPG · ${ordinal(r.stat.rank)} ${r.position}`
+            : r.redraftValue != null ? `${fmtValue(r.redraftValue)} now` : ""}
         </span>
       </span>
     </li>
@@ -3364,7 +3384,7 @@ function TradeBlock({ data, settings, setSettings }) {
             <h4 className="text-sm font-semibold flex items-center gap-2"><PosBadge pos={pos} /></h4>
             {list.length ? <ul className="flex flex-col gap-1.5">{list.map((r) => row(r, win))}</ul>
               : <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {win ? `No ${pos} veterans worth more now than in dynasty.` : `No young ${pos}s worth building around.`}</span>}
+                  {win ? `No ${pos} veterans scoring like starters for a dynasty discount.` : `No young ${pos}s worth building around.`}</span>}
           </div>
         );
       })}
@@ -3380,12 +3400,14 @@ function TradeBlock({ data, settings, setSettings }) {
         </p>
         <AboutData>
           <DynastyStatusLine data={data} />{" "}
-          A contender wants veterans ({TRADE_BLOCK_VET_AGE} and up) worth at least {Math.round((TRADE_BLOCK_NOW_EDGE - 1) * 100)}% more
-          this season (redraft value, "now") than in dynasty: a rebuilder sells them at their dynasty price. Sorted by this
-          season's value; players out long-term are left out. A rebuilder wants players 24 and under worth at least{" "}
-          {Math.round(REBUILD_TARGET_MIN_SHARE * 100)}% of the top value, plus players {INJURED_MAX_AGE} and under out for
-          the year but back next season, cheapest while hurt. <span style={{ color: "var(--series-red)" }}>▼</span> marks a
-          buy-low (down {Math.round(BUY_LOW_MIN_DIP * 100)}%+ in 30 days); those rank higher. Values follow the format below.
+          A contender wants veterans ({TRADE_BLOCK_VET_AGE} and up) scoring like starters this season, by points per game
+          in the scoring picked below (Sleeper's season stats, {BUY_LOW_MIN_GAMES}+ games; starter means the top 1.5 QBs,
+          2.5 RBs, 3.5 WRs and 1.5 TEs per team), and worth at least as much this season (redraft value) as in dynasty: a
+          rebuilder sells them at their dynasty price. Players out long-term are left out. A rebuilder wants players 24
+          and under worth at least {Math.round(REBUILD_TARGET_MIN_SHARE * 100)}% of the top value, plus players{" "}
+          {INJURED_MAX_AGE} and under out for the year but back next season, cheapest while hurt.{" "}
+          <span style={{ color: "var(--series-red)" }}>▼</span> marks a buy-low (down {Math.round(BUY_LOW_MIN_DIP * 100)}%+
+          in 30 days and scoring well below their value rank); those rank higher. Values follow the format below.
         </AboutData>
       </header>
       <LeagueSettings settings={settings} setSettings={setSettings} fields={["qb", "teams", "ppr", "tep"]} />
@@ -3393,7 +3415,7 @@ function TradeBlock({ data, settings, setSettings }) {
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading values…</p>
       ) : (
         <>
-          <ProfileSection title="If you're competing" aside="Veterans worth more this season than in dynasty, by this season's value">
+          <ProfileSection title="If you're competing" aside="Veterans scoring like starters, by points per game">
             {bucket(true)}
           </ProfileSection>
           <ProfileSection title="If you're rebuilding" aside="Young players and injured players back next year, buy-lows first">
@@ -4749,7 +4771,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const showStandings = !!raw && raw.league.settings?.type !== 3 && raw.league.status !== "pre_draft";
   const standings = useProjectedStandings(raw, showStandings);
   const matchups = useWeekMatchups(raw, showStandings);
-  const seasonPpg = useSeasonPpg(showStandings ? raw?.league : null);
+  const leaguePoints = useMemo(
+    () => (showStandings && raw ? (stats) => scoreStats(stats, raw.league.scoring_settings || {}) : null), [showStandings, raw]);
+  const seasonPpg = useSeasonPpg(showStandings ? raw?.league.season : null, leaguePoints);
   const standingOf = useMemo(() => {
     const now = standings.now || [];
     const playoffTeams = Math.min(raw?.league.settings?.playoff_teams || 0, now.length);

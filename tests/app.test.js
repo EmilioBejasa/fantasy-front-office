@@ -283,3 +283,22 @@ test("valuedIds: top players by redraft value, picks left out", () => {
   assert.equal(ids.size, 150);
   assert.ok(ids.has("159") && !ids.has("0") && !ids.has("pick")); // ranked by redraftValue, not dynasty value
 });
+
+test("tradeBlock: starter-level veterans by PPG for contenders, young players for rebuilders", () => {
+  const row = (id, position, age, value, redraftValue, trend30 = 0) => ({ id, name: id, position, age, value, redraftValue, trend30, posRank: 1 });
+  const rows = [
+    row("star", "WR", 23, 9000, 8000),
+    row("vet", "WR", 29, 4000, 5000), row("vetSlow", "WR", 30, 4000, 5000), row("vetPricey", "WR", 28, 6000, 5000),
+    row("hurt", "WR", 27, 4000, 6000),
+  ];
+  const ppg = { vet: { ppg: 18, gp: 7, rank: 5 }, vetSlow: { ppg: 6, gp: 7, rank: 80 }, vetPricey: { ppg: 20, gp: 7, rank: 3 }, star: { ppg: 15, gp: 7, rank: 12 } };
+  const sidelined = (r) => (r.id === "hurt" ? { longTerm: true } : null);
+  const wr = (b) => b.find((p) => p.pos === "WR");
+  const withStats = wr(app.tradeBlock(rows, sidelined, new Set(), ppg, 12));
+  assert.deepEqual(plain(withStats.winNow.map((r) => r.id)), ["vet"]); // starter PPG, cheaper in dynasty, healthy
+  assert.equal(withStats.winNow[0].stat.ppg, 18);
+  assert.deepEqual(plain(withStats.youth.map((r) => r.id)), ["star"]);
+  // Before stats load: worth 10%+ more this season than in dynasty, by redraft value.
+  const noStats = wr(app.tradeBlock(rows, sidelined, new Set()));
+  assert.deepEqual(plain(noStats.winNow.map((r) => r.id)), ["vet", "vetSlow"]);
+});

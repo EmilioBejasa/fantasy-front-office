@@ -674,13 +674,13 @@ const ALL_WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
 
 
 
-// Players on injured reserve (or reserve/PUP) as of 2026-10-21, plus the ones
+// Players on injured reserve (or reserve/PUP) as of 2026-11-02, plus the ones
 // whose seasons are over, from Sleeper's injury designations and team news.
 // Both lists carry a four-game minimum, so the grid shows "IR" from
 // `sinceWeek` through the earliest week they're allowed back (see irReturnWeek),
 // or through Week 18 when `seasonEnding` is set. `sinceWeek` is the first game
 // of their current absence — 1 for players who started the season there.
-const INJURED_RESERVE_UPDATED_ON = "2026-10-21";
+const INJURED_RESERVE_UPDATED_ON = "2026-11-02";
 const INJURED_RESERVE = [
   { id: "achane", list: "IR", injury: "Torn ACL", sinceWeek: 4, seasonEnding: true },
   { id: "dart", list: "IR", injury: "Knee (MCL, PCL, meniscus surgery)", sinceWeek: 3, seasonEnding: true },
@@ -689,18 +689,11 @@ const INJURED_RESERVE = [
   { id: "brooks-jonathon", list: "IR", injury: "Abdomen (surgery)", sinceWeek: 3 },
   { id: "conner-james", list: "IR", injury: "Foot", sinceWeek: 1 },
   { id: "pierce-alec", list: "IR", injury: "Heel", sinceWeek: 3 },
-  { id: "mason-jordan", list: "IR", injury: "Thumb (surgery)", sinceWeek: 2 },
-  { id: "charbonnet", list: "PUP", injury: "ACL recovery", sinceWeek: 1 },
   { id: "stribling", list: "IR", injury: "Ankle (surgery)", sinceWeek: 2 },
   { id: "benson-trey", list: "IR", injury: "Knee", sinceWeek: 1 },
-  { id: "coleman-jonah", list: "IR", injury: "Ankle sprain", sinceWeek: 3 },
-  { id: "sampson-dylan", list: "IR", injury: "Knee", sinceWeek: 2 },
   { id: "njoku-david", list: "IR", injury: "Lower leg", sinceWeek: 3 },
-  { id: "stowers-eli", list: "IR", injury: "Hamstring", sinceWeek: 1 },
   { id: "pacheco", list: "IR", injury: "Back", sinceWeek: 1 },
   { id: "tonges-jake", list: "IR", injury: "Knee", sinceWeek: 2 },
-  { id: "dell", list: "IR", injury: "ACL/MCL recovery", sinceWeek: 1 },
-  { id: "kirk-christian", list: "IR", injury: "Calf", sinceWeek: 1 },
   { id: "pearsall-ricky", list: "IR", injury: "Knee (PCL surgery)", sinceWeek: 1, seasonEnding: true },
   { id: "kalinic-nikola", list: "IR", injury: "Knee", sinceWeek: 1 },
   { id: "hurts", list: "IR", injury: "Blood clots (calf DVT, lungs)", sinceWeek: 6, seasonEnding: true },
@@ -709,7 +702,6 @@ const INJURED_RESERVE = [
   { id: "sl-5008", list: "IR", injury: "Torn Achilles", sinceWeek: 5, seasonEnding: true },
   { id: "sl-5973", list: "IR", injury: "Torn biceps (surgery)", sinceWeek: 4, seasonEnding: true },
   { id: "etienne", list: "IR", injury: "Hamstring", sinceWeek: 4 },
-  { id: "price-j", list: "IR", injury: "Chest", sinceWeek: 4 },
   { id: "pittman", list: "IR", injury: "Foot (plantar fasciitis)", sinceWeek: 5 },
   { id: "bigsby", list: "IR", injury: "Core muscle (surgery)", sinceWeek: 5 },
   { id: "mcmillan-jalen", list: "IR", injury: "Knee (PCL sprain)", sinceWeek: 4 },
@@ -723,7 +715,6 @@ const INJURED_RESERVE = [
   { id: "sl-11370", list: "IR", injury: "Ankle", sinceWeek: 5 },
   { id: "sl-11626", list: "IR", injury: "Knee", sinceWeek: 3 },
   { id: "sl-12472", list: "IR", injury: "Hip", sinceWeek: 6 },
-  { id: "sl-12483", list: "IR", injury: "Forearm (fracture)", sinceWeek: 4 },
   { id: "sl-12492", list: "IR", injury: "Ankle sprain", sinceWeek: 5 },
   { id: "sl-3286", list: "IR", injury: "Ankle", sinceWeek: 3 },
   { id: "sl-4177", list: "IR", injury: "Calf", sinceWeek: 5 },
@@ -733,6 +724,13 @@ const INJURED_RESERVE = [
   { id: "sl-8168", list: "IR", injury: "Ankle", sinceWeek: 6 },
   { id: "sl-8188", list: "IR", injury: "Ankle (dislocation, surgery; out 12-16 weeks)", sinceWeek: 5 },
   { id: "sl-8195", list: "IR", injury: "Calf", sinceWeek: 3 },
+  { id: "mclaurin", list: "IR", injury: "Torn patellar tendon (surgery)", sinceWeek: 9, seasonEnding: true },
+  { id: "sl-6826", list: "IR", injury: "Knee", sinceWeek: 8, seasonEnding: true },
+  { id: "jaylin-noel", list: "IR", injury: "Turf toe (surgery)", sinceWeek: 8, seasonEnding: true },
+  { id: "harvey-rj", list: "IR", injury: "Knee", sinceWeek: 8 },
+  { id: "tracy", list: "IR", injury: "Hamstring", sinceWeek: 8 },
+  { id: "sl-12455", list: "IR", injury: "Hamstring", sinceWeek: 7 },
+  { id: "sl-12521", list: "IR", injury: "Shoulder (surgery)", sinceWeek: 7 },
 ];
 const IR_MIN_GAMES = 4;
 const INJURED_BY_ID = Object.fromEntries(INJURED_RESERVE.map((r) => [r.id, r]));
@@ -5913,7 +5911,8 @@ function useNbaData(enabled) {
         const ttl = s === state.season ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
         seasons[s] = await get(`season-${s}`, ttl, () => N.fetchSeason(s));
       }));
-      const players = await get("players", 6 * 60 * 60 * 1000, N.fetchPlayers);
+      // Hourly: the player list carries injury statuses, which change through game days.
+      const players = await get("players", 60 * 60 * 1000, N.fetchPlayers);
       // Optional: the pages work without it, minus the games-per-week counts.
       const schedule = await get(`schedule-${state.season}`, 6 * 60 * 60 * 1000, () => N.fetchSchedule(state.season)).catch(() => []);
       if (refreshing && !fetched) return;
@@ -6567,7 +6566,7 @@ function NbaInjuries({ data, settings }) {
   return (
     <div className="flex flex-col gap-5">
       <NbaPageHeader title="Injury Report" lead="Every NBA player with an injury designation right now, most serious first.">
-        Live from Sleeper's NBA player data (refreshed every few hours). Out and IR are the most serious, then suspended,
+        Live from Sleeper's NBA player data (refreshed hourly). Out and IR are the most serious, then suspended,
         doubtful and questionable; GTD is a game-time decision and DTD day-to-day. "Fantasy-relevant" means 15+ fantasy
         points per game ({settings.scoring === "espn" ? "ESPN" : "Standard"} scoring), the same blend the Trade Desk uses:
         this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. GP is games played

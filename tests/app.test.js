@@ -302,3 +302,43 @@ test("tradeBlock: starter-level veterans by PPG for contenders, young players fo
   const noStats = wr(app.tradeBlock(rows, sidelined, new Set()));
   assert.deepEqual(plain(noStats.winNow.map((r) => r.id)), ["vet", "vetSlow"]);
 });
+
+test("teamHeadline: a streak, points rank and dynasty standouts, at most three", () => {
+  const team = (rosterId, pf, ages, picks, trend30) => ({
+    rosterId, record: { wins: 1, losses: 1, ties: 0, pf },
+    lineup: ages.map((age) => ({ player: { age } })),
+    assets: [{ position: "WR", value: 5000, trend30 }, ...Array.from({ length: picks }, () => ({ position: "PICK", name: "2027 1st", value: 3000 }))],
+  });
+  const a = team(1, 900, [22, 23], 5, 800), b = team(2, 800, [28, 29], 1, -100), c = team(3, 700, [26, 26], 2, 0);
+  const facts = app.teamHeadline(a, [a, b, c], { streak: "3W", standing: { playoffs: 0.8 }, isDynasty: true, hasRecord: true });
+  assert.deepEqual(plain(facts), ["3-game win streak", "1st in points scored", "80% playoff odds"]);
+  const old = app.teamHeadline(b, [a, b, c], { streak: "1L", standing: null, isDynasty: true, hasRecord: false });
+  assert.deepEqual(plain(old), ["Oldest lineup in the league"]);
+});
+
+test("teamValueSeries: weekly sums, a rookie counting his first value", () => {
+  const history = { dates: ["d1", "d2", "d3"], players: { sf: { a: { ktc: [100, 110, 120] }, b: { ktc: [null, 50, 60] } } } };
+  const team = { assets: [{ id: "a", position: "WR" }, { id: "b", position: "RB" }, { id: "p", position: "PICK" }] };
+  assert.deepEqual(plain(app.teamValueSeries(team, history, "sf", 2)), [{ t: "d2", v: 160 }, { t: "d3", v: 180 }]);
+  assert.deepEqual(plain(app.teamValueSeries(team, history, "sf").map((p) => p.v)), [150, 160, 180]);
+  assert.deepEqual(plain(app.teamValueSeries(team, null, "sf")), []);
+});
+
+test("valueTrade: what each side got, with a verdict for two teams", () => {
+  const teams = [{ rosterId: 1, name: "A" }, { rosterId: 2, name: "B" }];
+  const byId = { x: { id: "x", name: "X", position: "WR", value: 6000 }, y: { id: "y", name: "Y", position: "RB", value: 2000 } };
+  const pickRow = (year, round) => ({ id: `pick-${year}-${round}`, value: round === 1 ? 3000 : 1000 });
+  const ctx = { topValue: 10000, playerValues: [10000, 6000, 2000], teams: 12 };
+  const tx = { transaction_id: "t", roster_ids: [1, 2], adds: { x: 1, y: 2 }, draft_picks: [{ season: "2027", round: 1, owner_id: 2 }], status_updated: 5 };
+  const tr = app.valueTrade(tx, teams, byId, pickRow, ctx);
+  assert.deepEqual(plain(tr.sides.map((s) => [s.name, s.total, s.gets.map((g) => g.name)])), [["A", 6000, ["X"]], ["B", 5000, ["2027 1st", "Y"]]]);
+  assert.ok(tr.result && ["fair", "slight", "favors"].includes(tr.result.verdict));
+});
+
+test("sinceLastVisit: value, rank and record changes", () => {
+  const prev = { total: 100000, rank: 5, wins: 2, losses: 3, ties: 0 };
+  const now = { total: 103000, rank: 4, wins: 3, losses: 3, ties: 0 };
+  assert.deepEqual(plain(app.sinceLastVisit(prev, now).map((c) => c.text)), ["value ▲ 3.0%", "roster rank 5th → 4th", "went 1-0"]);
+  assert.deepEqual(plain(app.sinceLastVisit(prev, prev)), []);
+  assert.deepEqual(plain(app.sinceLastVisit(null, now)), []);
+});

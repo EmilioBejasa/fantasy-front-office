@@ -531,8 +531,27 @@ The **Boardroom** (`MyLeagues`) has two kinds of page:
   instant.
 
 A league page values the league with **its own settings**, not the shared ones above. It loads a separate FantasyCalc
-value set through the same `useDynastyValues` cache. From top to bottom, the page has your team, trade targets (redraft),
-position rooms and lineup, bench, power rankings and the settings table:
+value set through the same `useDynastyValues` cache. It opens with a team banner, then the sections in an order that
+follows your team's situation (`LEAGUE_SECTION_ORDER`, applied with CSS `order`): a contender's page leads with this week's
+matchup and the standings, a rebuilder's with its building blocks; the offseason leads with building blocks and picks,
+and everything else uses team, matchup, standings, league pulse, building blocks, power rankings, settings:
+
+- **Team banner** (`TeamBanner`): your Sleeper avatar, team name and lean, tinted in the lean's color, with up to three
+  facts that set the team apart in its league (`teamHeadline`: a win or losing streak from Sleeper's roster metadata,
+  a top-3 or last points rank, playoff odds of 60%+ or 15% or less, and in dynasty the youngest or oldest lineup, the
+  most first-round picks, the hottest or coldest roster value this month). On the right: roster value (counting up),
+  its 30-day change and a sparkline of the players' combined KeepTradeCut value over the last 8 weekly points
+  (`teamValueSeries`, data/market-history.js). **Since your last visit** (`useLastVisit`, this browser's
+  `localStorage`, at least an hour apart) shows the change in value, roster rank and record since then.
+- **Building blocks** (`BuildingBlocks`, dynasty): your players 24 and under, best first with their 30-day trend, and
+  the picks you own in the next three drafts, by year.
+- **League pulse** (`LeaguePulse`): the league's completed trades, adds and drops over the last 3 weeks (Sleeper's
+  `/league/<id>/transactions/<week>`, `useLeagueTransactions`). Each trade shows what each side got, valued with the
+  league's values, and this app's verdict (`valueTrade` with `evaluateTrade`). Adds and drops show players worth
+  1,000+ (`PULSE_MIN_VALUE`), with the FAAB bid. Highlights: the longest win streak, the points leader, and the biggest
+  30-day riser and faller on a roster.
+- Panels across the site fade in when they appear and numeric stat tiles count up (`useCountUp`, `CountUp`); both are
+  off when the viewer prefers reduced motion.
 
 - **Values follow the league's own type** (no switch): dynasty and keeper leagues use dynasty values and show each
   team's lean (Contender / In the mix / Rebuilding); redraft and guillotine leagues (Sleeper type 3) use redraft

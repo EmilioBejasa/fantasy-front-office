@@ -602,7 +602,10 @@ position rooms and lineup, bench, power rankings and the settings table:
   against and max points for, from Sleeper. **End of season** (the default) projects them through the regular season:
   - the remaining weeks are played on the league's real schedule (Sleeper's matchups), using Sleeper's weekly
     projections scored in the league's own scoring (each stat line × `scoring_settings`, so TE premium, IDP and K/DEF
-    count);
+    count). Bonuses the projections leave out are estimated (`withProjectedBonuses`): first-down bonuses from projected
+    passing, rushing and receiving first downs; 40+ yard TDs as a share of TDs (~10% passing and receiving, ~3.5%
+    rushing); yardage milestones (100+ rushing or receiving, 300/400+ passing, ...) as the odds of reaching them, with
+    weekly yards spread around the projection (`YARD_SPREAD`, fit to 2026 weeks 1-7);
   - each future week a team scores its best projected lineup in the league's slots (taxi squads left out), times how
     close to its best lineup it has started so far (PF ÷ max PF, kept between 75% and 100%). That best lineup is its
     projected max PF;

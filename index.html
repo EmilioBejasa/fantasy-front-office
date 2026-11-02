@@ -3319,6 +3319,8 @@ function suggestTrades(team, teams, league, rows, mode, leanOf, outForYear = new
 //   best lineup is its projected max PF;
 // - a week already under way uses the lineups actually set, with points
 //   already scored in place of projections;
+// - bonuses Sleeper's projections leave out (first downs, 40+ yard TDs,
+//   yardage milestones) are estimated (withProjectedBonuses);
 // - players out for the season (seasonOverIds) score nothing: Sleeper's
 //   weekly projections sit out the four-game IR minimum but then bring a
 //   player back, season-ending or not;
@@ -3332,6 +3334,36 @@ const PROJ_SLOTS = {
   ...SLOT_ELIGIBLE, K: ["K"], DEF: ["DEF"],
   DL: ["DL"], LB: ["LB"], DB: ["DB"], IDP_FLEX: ["DL", "LB", "DB"],
 };
+
+// Sleeper's projections leave out some bonuses leagues score, so they're
+// filled in (where missing) from the stats they do have:
+// - first-down bonuses (bonus_fd_qb/rb/wr/te) are the player's passing,
+//   rushing and receiving first downs, as Sleeper counts them;
+// - 40+ yard TDs are a share of TDs (2026 weeks 1-7: ~10% of passing and
+//   receiving TDs, ~3.5% of rushing);
+// - yardage milestones (100+ rushing, 300+ passing, ...) are the odds of
+//   reaching them, weekly yards spread around the projection by
+//   YARD_SPREAD of it (fit to 2026 weeks 1-7 projections vs results).
+const LONG_TD_SHARE = { pass_td_40p: ["pass_td", 0.1], rec_td_40p: ["rec_td", 0.1], rush_td_40p: ["rush_td", 0.035] };
+const YARD_SPREAD = { pass: 0.3, rush: 0.45, rec: 0.6, rush_rec: 0.45 };
+const YARD_LINES = { pass: [300, 400], rush: [100, 200], rec: [100, 200], rush_rec: [100, 200] };
+const FD_BONUS = { QB: "bonus_fd_qb", RB: "bonus_fd_rb", WR: "bonus_fd_wr", TE: "bonus_fd_te" };
+function withProjectedBonuses(stats, position) {
+  const s = { ...stats };
+  const fd = FD_BONUS[position];
+  if (fd && s[fd] == null) s[fd] = (s.pass_fd || 0) + (s.rush_fd || 0) + (s.rec_fd || 0);
+  for (const [key, [from, share]] of Object.entries(LONG_TD_SHARE)) if (s[key] == null && s[from]) s[key] = s[from] * share;
+  const yards = { pass: s.pass_yd || 0, rush: s.rush_yd || 0, rec: s.rec_yd || 0 };
+  yards.rush_rec = yards.rush + yards.rec;
+  for (const [kind, mean] of Object.entries(yards)) {
+    if (mean <= 0) continue;
+    for (const line of YARD_LINES[kind]) {
+      const key = `bonus_${kind}_yd_${line}`;
+      if (s[key] == null) s[key] = 1 - normalCdf((line - mean) / (mean * YARD_SPREAD[kind]));
+    }
+  }
+  return s;
+}
 
 // One week of Sleeper projections for the given positions, as
 // { player_id: { pos: [fantasy positions], position, name, team, opp, status, stats } }.
@@ -3347,7 +3379,7 @@ function fetchWeekProjections(season, week, positions) {
         pos: r.player?.fantasy_positions || [r.player?.position], position: r.player?.position || null,
         name: [r.player?.first_name, r.player?.last_name].filter(Boolean).join(" "),
         team: r.team || r.player?.team || null, opp: r.opponent || null, status: r.player?.injury_status || null,
-        stats: r.stats,
+        stats: withProjectedBonuses(r.stats, r.player?.position),
       }])));
     promise.catch(() => weekProjectionCache.delete(key));
     weekProjectionCache.set(key, promise);

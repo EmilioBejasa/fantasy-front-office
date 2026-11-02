@@ -561,16 +561,14 @@ position rooms and lineup, bench, power rankings and the settings table:
   `SELL_AGE` for their position, QB 31, RB 26, WR 28, TE 29, to the contenders, and build around players 24 and under);
   a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
   just the weakest room to upgrade and the deepest to deal from.
-- **Trade Block** (its own tab under Dynasty, `#/targets`; `MyLeagues` with `targetsPage`, `tradeMarket` and
-  `TradeBucket`, dynasty only for now): `#/targets` lists your dynasty leagues (your league first), and
-  `#/targets/<id>` is one league's trade targets, also linked from the league page between the standings and the
-  power rankings. Every trade target in the league, the same for every
-  team, in two buckets split by position. **If you're competing**: veterans (26 and up) on rebuilding teams who score
-  like starters (top 1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game, `MARKET_STARTERS`), by points per
-  game. **If you're rebuilding**: players 24 and under worth 30%+ of the top value on contending teams, bench players
-  and buy-lows (▼) first, then by value. Up to eight per position (`MARKET_PER_SIDE`); anyone out long-term is left
-  out; your own players are marked "(you)"; team names go back to the league page with that team's dropdown open.
-  In dynasty this replaces the trade targets on your team panel.
+- **Trade Block** (its own tab under Dynasty, `#/targets`, `TradeBlock` and `tradeBlock`): no league needed. It
+  uses the War Room's dynasty values in the format picked on the page (QB, teams, scoring, TE premium), split by
+  position into two buckets. **If you're competing**: veterans (26 and up) worth 10%+ more this season (redraft
+  value) than in dynasty, so a rebuilder sells them at a dynasty price, by this season's value; anyone out long-term
+  is left out. **If you're rebuilding**: players 24 and under worth 30%+ of the top value, plus players 27 and under
+  out for the year but back next season (`outForYearIds`), with buy-lows (▼, down 3%+ in 30 days) ranked higher.
+  Up to ten per position (`TRADE_BLOCK_PER_POSITION`). In dynasty leagues, the league page's team panel no longer
+  lists trade targets; this tab does instead.
 - **Buy low** (`buyLowTargets`, dynasty only) targets come first in each strategy guide (up to three of its four
   cards). Only ones with a fair offer are shown. A rebuilder's usual targets must also be worth 30% of the top
   value (`REBUILD_TARGET_MIN_SHARE`), not prospects far down the board. A buy-low is young (25 and under), expensive (40%+ of the top value) players on other teams whose KTC value dropped 3%+

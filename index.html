@@ -4462,29 +4462,36 @@ function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing
       <GamePlan plan={plan} isDynasty={isDynasty} />
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-          Trade targets{targets.rebuild ? " · youth for veterans" : " · lineup upgrades"}
+          Trade targets{targets.rebuild ? " · youth for veterans" : " · lineup upgrades"}{buyLows.length > 0 ? " · buy low" : ""}
         </span>
+        {buyLows.length > 0 && (
+          <>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="font-semibold" style={{ color: "var(--series-red)" }}>▼ Buy low</span> · young, expensive players whose price dipped
+            </span>
+            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {buyLows.map((b) => <BuyLowCard key={b.player.id} b={b} onView={onView} onOpen={onOpen} sleeperPlayers={sleeperPlayers} />)}
+            </ul>
+          </>
+        )}
         {best.length === 0 ? (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair trades found for what {team.name} can offer.</p>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {best.map((s) => (
-              <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets} forName={team.name}
-                sleeperPlayers={sleeperPlayers} onView={onView} onOpen={onOpen} />
-            ))}
-          </ul>
+          <>
+            {buyLows.length > 0 && (
+              <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                {targets.rebuild ? "Youth for veterans" : "Lineup upgrades"}
+              </span>
+            )}
+            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {best.map((s) => (
+                <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets} forName={team.name}
+                  sleeperPlayers={sleeperPlayers} onView={onView} onOpen={onOpen} />
+              ))}
+            </ul>
+          </>
         )}
       </div>
-      {buyLows.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-            Buy low · young players whose price dipped
-          </span>
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {buyLows.map((b) => <BuyLowCard key={b.player.id} b={b} onView={onView} onOpen={onOpen} sleeperPlayers={sleeperPlayers} />)}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -4857,6 +4864,21 @@ function MyLeagues({ settings, setSettings, navigate }) {
                   of their weak spots (or brings a rebuilder youth and picks, or upgrades a contender's lineup), for a player
                   from a position where they have plenty. Every offer is fair, or a slight overpay, by this app's trade formula.
                 </p>
+                {buyLows.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--series-red)" }}>▼ Buy low</span>
+                      <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>
+                        Young, expensive players whose price dipped on a slow stretch
+                      </span>
+                    </h4>
+                    <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {buyLows.map((b) => (
+                        <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {targets.list.length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                     No fair upgrades found: nobody available would improve this lineup for what {team === myTeam ? "you" : "they"} can offer.
@@ -4884,16 +4906,6 @@ function MyLeagues({ settings, setSettings, navigate }) {
                   </div>
                   );
                 })}
-              </ProfileSection>
-            )}
-
-            {buyLows.length > 0 && (
-              <ProfileSection title="Buy low" aside="Young, expensive players whose price dipped on a slow stretch">
-                <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {buyLows.map((b) => (
-                    <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
-                  ))}
-                </ul>
               </ProfileSection>
             )}
 

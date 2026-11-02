@@ -4138,6 +4138,187 @@ function WeekMatchup({ mu, teams, myTeam, team, onView }) {
   );
 }
 
+// One suggested trade (from suggestTrades), with why it works for both sides.
+// `forName` is who it's for: "you", or the team's name.
+function TradeIdeaCard({ s, targets, forName, sleeperPlayers, onView, onOpen }) {
+  const getSum = sumOf(s.get.map((a) => a.value));
+  return (
+    <li className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0">
+          {s.get.map((g, j) => (
+            <span key={j} className="block text-sm">
+              {j > 0 && <span className="text-xs" style={{ color: "var(--text-muted)" }}>+ </span>}
+              <PlayerLink id={g.id} pos={g.position}>{g.name}</PlayerLink>{" "}
+              {g.position === "PICK" ? <PosBadge pos="PICK" /> : <PosBadge pos={g.position} rank={g.posRank} />}
+              {g.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {g.age}</span>}
+            </span>
+          ))}
+          <button type="button" onClick={() => onView(s.partner.rosterId)} className="text-xs underline"
+            style={{ color: "var(--text-secondary)" }}>from {s.partner.name}</button>
+        </span>
+        <span className="text-xs font-semibold tabular-nums shrink-0 text-right" style={{ color: "var(--trend-up)" }}>
+          {!targets.rebuild ? `Lineup +${fmtValue(Math.round(s.gain))}`
+            : s.ageDrop >= 0.5 ? `${s.ageDrop.toFixed(1)} yrs younger` : "Back next year"}
+        </span>
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+        <span className="font-semibold" style={{ color: "var(--text-muted)" }}>OFFER </span>
+        {s.give.map((a, j) => (
+          <span key={j}>{j > 0 && " + "}{a.name} <span style={{ color: "var(--text-muted)" }}>({fmtValue(a.value)})</span></span>
+        ))}
+        <span style={{ color: "var(--text-muted)" }}> for {fmtValue(getSum)}</span>
+      </p>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        {s.injured && (
+          <span style={{ color: "var(--hue-violet)" }}>
+            Out for the season{sleeperPlayers[s.get[0].id]?.injury ? ` (${sleeperPlayers[s.get[0].id].injury})` : ""}, back next year: buy while the price is down.{" "}
+          </span>
+        )}
+        <span style={{ color: "var(--text-secondary)" }}>
+          {s.fills.map((f) => (
+            <span key={f.pos}>{s.partner.name} is {ordinal(f.rank)} of {targets.n} at {f.pos}: {f.names.join(" and ")} {f.names.length > 1 ? "fill" : "fills"} that. </span>
+          ))}
+          {s.youth.length > 0 && <>{s.partner.name} is rebuilding, and {s.youth.join(" and ")} {s.youth.length > 1 ? "are" : "is"} the kind of piece they want. </>}
+          {s.fills.length === 0 && s.youth.length === 0 && s.theirGain > 0 && <>Upgrades {s.partner.name}'s lineup for their title run. </>}
+          {s.spare && <>They're {ordinal(s.spare.rank)} at {s.spare.pos}, so they can spare {s.get[0].name}. </>}
+          {s.partnerLean === "Rebuilding" && s.youth.length === 0 && s.sellsVeteran && <>As a rebuilding team, they should be open to moving veterans. </>}
+        </span>
+        {s.need && <>For {forName}: a {s.need.pos} room that's {ordinal(s.need.rank)} of {targets.n}. </>}
+        {s.benched.length > 0 && <>Moves {s.benched.map((a) => a.name).join(" and ")} to the bench. </>}
+        {s.result.verdict === "slight" ? "Slight overpay." : "Fair value."}
+      </p>
+      <button type="button" onClick={() => onOpen(s)} className="pill self-start text-xs rounded-full px-3 py-1 font-medium">
+        Open in Trade Desk →</button>
+    </li>
+  );
+}
+
+/* ---------------- strategy guide ---------------- */
+// A team's game plan, from its lean (teamLean) and its position rooms:
+// - a contender gains production: upgrade its weakest rooms, paying with
+//   picks and young bench players who won't help this season, ideally to
+//   rebuilding teams (who sell veterans for exactly that);
+// - a rebuilder sheds points: sells veterans (SELL_AGE and up for their
+//   position) while they still score, to contenders, for young players and picks;
+// - a team in the mix leans the way its lineup's value-weighted age does
+//   (YOUNG_CORE_AGE / OLD_CORE_AGE), or keeps both doors open;
+// - in redraft it's just upgrading the weakest room from the deepest.
+// A room in the league's bottom 40% (PARTNER_WEAK) is a hole; top 30% is depth.
+// Returns { focus, moves: [{ title, text, assets }] }.
+const SELL_AGE = { QB: 31, RB: 26, WR: 28, TE: 29 };
+const GUIDE_ASSETS = 4;
+function teamGamePlan(team, teams, { isDynasty, lean, leanOf, ranks, outForYear }) {
+  const n = teams.length;
+  const rooms = ROOM_POSITIONS.map((pos) => ({ pos, rank: ranks[pos][team.rosterId] }));
+  const weak = rooms.filter((r) => n > 1 && (r.rank - 1) / (n - 1) > PARTNER_WEAK).sort((a, b) => b.rank - a.rank);
+  const deep = rooms.filter((r) => r.rank <= Math.ceil(n * 0.3)).sort((a, b) => a.rank - b.rank);
+  const roomList = (list) => list.map((r) => `${r.pos} (${ordinal(r.rank)} of ${n})`).join(", ");
+  const out = team.longTermOut || new Set();
+  const starting = new Set(team.lineup.map((l) => l.player?.id).filter(Boolean));
+  const players = team.assets.filter((a) => a.position !== "PICK" && a.value >= TARGET_MIN_VALUE);
+  const sellable = players.filter((a) => !out.has(a.id) && (a.age ?? 0) >= (SELL_AGE[a.position] ?? 28)).slice(0, GUIDE_ASSETS);
+  const chips = team.assets.filter((a) => a.value >= TARGET_MIN_VALUE && !starting.has(a.id)
+    && (a.position === "PICK" || (a.age ?? 99) <= 24)).slice(0, GUIDE_ASSETS);
+  const youngCore = players.filter((a) => (a.age ?? 99) <= 24 || (outForYear.has(a.id) && (a.age ?? 99) <= INJURED_MAX_AGE)).slice(0, GUIDE_ASSETS);
+  const others = (label) => teams.filter((t) => t !== team && leanOf(t)?.label === label).map((t) => t.name);
+
+  const upgrade = weak.length
+    ? { title: "Upgrade", text: `${roomList(weak)}: the ${weak.length > 1 ? "weakest rooms" : "weakest room"} in the lineup.` }
+    : { title: "Upgrade", text: `No real holes. Add depth at the thinnest room, ${roomList([...rooms].sort((a, b) => b.rank - a.rank).slice(0, 1))}.` };
+  const dealFrom = deep.length ? { title: "Deal from", text: `Depth at ${roomList(deep)}: room to spare a starter there.` } : null;
+  const payWith = chips.length ? { title: "Pay with", text: "Picks and young players who won't start this year:", assets: chips } : null;
+  const sell = sellable.length
+    ? { title: "Sell", text: "Veterans whose value fades before the next title window, while they still score:", assets: sellable }
+    : { title: "Sell", text: "No aging veterans worth much left to sell. Keep turning bench depth into picks." };
+  const contenders = others("Contender"), rebuilders = others("Rebuilding");
+  const buyers = contenders.length ? { title: "Buyers", text: `Contenders pay for points: ${contenders.join(", ")}.` } : null;
+  const sellers = rebuilders.length ? { title: "Partners", text: `Rebuilding teams sell veterans for picks and youth: ${rebuilders.join(", ")}.` } : null;
+  const target = { title: "Target", text: "Players 24 and under, rookie picks, and young players out for the season but back next year (cheapest now)." };
+  const keep = youngCore.length ? { title: "Build around", text: "", assets: youngCore } : null;
+
+  if (!isDynasty) return { focus: "Upgrade the lineup", moves: [upgrade, dealFrom].filter(Boolean) };
+  if (lean?.label === "Contender") return { focus: "Gain production now", moves: [upgrade, payWith, dealFrom, sellers].filter(Boolean) };
+  if (lean?.label === "Rebuilding") return { focus: "Shed points for the future", moves: [sell, buyers, target, keep].filter(Boolean) };
+  const lineup = team.lineup.map((l) => l.player).filter(Boolean);
+  const coreAge = weightedBy(lineup, (a) => a.age ?? 26);
+  if (coreAge < YOUNG_CORE_AGE) return { focus: `Lean young (lineup's average age ${coreAge.toFixed(1)}): build for next year`,
+    moves: [sell, keep, upgrade, buyers].filter(Boolean) };
+  if (coreAge > OLD_CORE_AGE) return { focus: `Lean win-now (lineup's average age ${coreAge.toFixed(1)}): push for this year`,
+    moves: [upgrade, payWith, dealFrom, sellers].filter(Boolean) };
+  return { focus: "Pick a lane",
+    moves: [upgrade, dealFrom, sellable.length ? { ...sell, title: "If it slips", text: "Sell these veterans before their value fades:" } : null].filter(Boolean) };
+}
+
+// The game plan as a short list, with the assets each move names.
+function GamePlan({ plan, isDynasty }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {plan.moves.map((m) => (
+        <li key={m.title} className="text-sm grid gap-x-3" style={{ gridTemplateColumns: "6.5rem minmax(0, 1fr)" }}>
+          <span className="text-xs font-semibold uppercase tracking-wider pt-0.5" style={{ color: "var(--text-muted)" }}>{m.title}</span>
+          <span style={{ color: "var(--text-secondary)" }}>
+            {m.text}
+            {m.assets?.map((a, j) => (
+              <span key={`${a.id}-${j}`} className="whitespace-nowrap">
+                {(j > 0 || m.text) && " "}
+                <PlayerLink id={a.id} pos={a.position}>{a.name}</PlayerLink>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {" "}({[isDynasty && a.age, fmtValue(a.value)].filter(Boolean).join(" · ")}){j < m.assets.length - 1 ? "," : ""}
+                </span>
+              </span>
+            ))}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const GUIDE_TARGETS = 3;
+// A team's strategy guide in the power rankings: where it stands, its game
+// plan, and its best few trade targets (suggestTrades, worked out on open).
+function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing, outForYear, sleeperPlayers, onView, onOpen }) {
+  const isDynasty = mode === "dynasty";
+  const lean = leanOf(team);
+  const plan = teamGamePlan(team, teams, { isDynasty, lean, leanOf, ranks, outForYear });
+  const targets = useMemo(() => suggestTrades(team, teams, league, rows, mode, leanOf, outForYear), [team, teams, league, rows, mode, outForYear]);
+  const best = [...targets.list].sort((a, b) => b.score - a.score).slice(0, GUIDE_TARGETS);
+  const n = teams.length;
+  const where = [
+    isDynasty && `${ordinal(ranks.total[team.rosterId])} of ${n} in roster value`,
+    `${ordinal(ranks.starters[team.rosterId])} in lineup value`,
+    standing?.playoffs != null && `${Math.round(standing.playoffs * 100)}% playoff odds`,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="mx-1 mb-3 rounded-lg border p-3 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Strategy guide</span>
+        <p className="text-sm font-semibold" style={{ color: lean?.color || "var(--text-primary)" }}>
+          {lean ? `${lean.label}: ` : ""}{plan.focus}
+        </p>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{where}</p>
+      </div>
+      <GamePlan plan={plan} isDynasty={isDynasty} />
+      <div className="flex flex-col gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          Trade targets{targets.rebuild ? " · youth for veterans" : " · lineup upgrades"}
+        </span>
+        {best.length === 0 ? (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair trades found for what {team.name} can offer.</p>
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {best.map((s) => (
+              <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets} forName={team.name}
+                sleeperPlayers={sleeperPlayers} onView={onView} onOpen={onOpen} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RosterBreakdown({ team, isDynasty }) {
   const groups = POS_KEYS.filter((k) => isDynasty || k !== "PICK")
     .map((k) => [k, team.assets.filter((a) => a.position === k)])
@@ -4481,6 +4662,15 @@ function MyLeagues({ settings, setSettings, navigate }) {
               </p>
             )}
 
+            {(() => {
+              const plan = teamGamePlan(team, teams, { isDynasty, lean: leanOf(team), leanOf, ranks, outForYear });
+              return (
+                <ProfileSection title="Game plan" aside={plan.focus}>
+                  <GamePlan plan={plan} isDynasty={isDynasty} />
+                </ProfileSection>
+              );
+            })()}
+
             {targets && (
               <ProfileSection title="Trade targets"
                 aside={targets.rebuild ? "Young players and injured players back next year, paid for with veterans"
@@ -4510,60 +4700,10 @@ function MyLeagues({ settings, setSettings, navigate }) {
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair {pos} targets found.</p>
                     ) : (
                   <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {group.map((s) => {
-                      const getSum = sumOf(s.get.map((a) => a.value));
-                      return (
-                        <li key={`${s.partner.rosterId}-${s.get[0].id}`} className="rounded-lg border p-3 flex flex-col gap-2"
-                          style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="min-w-0">
-                              {s.get.map((g, j) => (
-                                <span key={j} className="block text-sm">
-                                  {j > 0 && <span className="text-xs" style={{ color: "var(--text-muted)" }}>+ </span>}
-                                  <PlayerLink id={g.id} pos={g.position}>{g.name}</PlayerLink>{" "}
-                                  {g.position === "PICK" ? <PosBadge pos="PICK" /> : <PosBadge pos={g.position} rank={g.posRank} />}
-                                  {g.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {g.age}</span>}
-                                </span>
-                              ))}
-                              <button type="button" onClick={() => viewTeam(s.partner.rosterId)} className="text-xs underline"
-                                style={{ color: "var(--text-secondary)" }}>from {s.partner.name}</button>
-                            </span>
-                            <span className="text-xs font-semibold tabular-nums shrink-0 text-right" style={{ color: "var(--trend-up)" }}>
-                              {!targets.rebuild ? `Lineup +${fmtValue(Math.round(s.gain))}`
-                                : s.ageDrop >= 0.5 ? `${s.ageDrop.toFixed(1)} yrs younger` : "Back next year"}
-                            </span>
-                          </div>
-                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                            <span className="font-semibold" style={{ color: "var(--text-muted)" }}>OFFER </span>
-                            {s.give.map((a, j) => (
-                              <span key={j}>{j > 0 && " + "}{a.name} <span style={{ color: "var(--text-muted)" }}>({fmtValue(a.value)})</span></span>
-                            ))}
-                            <span style={{ color: "var(--text-muted)" }}> for {fmtValue(getSum)}</span>
-                          </p>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                            {s.injured && (
-                              <span style={{ color: "var(--hue-violet)" }}>
-                                Out for the season{sleeperPlayers[s.get[0].id]?.injury ? ` (${sleeperPlayers[s.get[0].id].injury})` : ""}, back next year: buy while the price is down.{" "}
-                              </span>
-                            )}
-                            <span style={{ color: "var(--text-secondary)" }}>
-                              {s.fills.map((f) => (
-                                <span key={f.pos}>{s.partner.name} is {ordinal(f.rank)} of {targets.n} at {f.pos}: {f.names.join(" and ")} {f.names.length > 1 ? "fill" : "fills"} that. </span>
-                              ))}
-                              {s.youth.length > 0 && <>{s.partner.name} is rebuilding, and {s.youth.join(" and ")} {s.youth.length > 1 ? "are" : "is"} the kind of piece they want. </>}
-                              {s.fills.length === 0 && s.youth.length === 0 && s.theirGain > 0 && <>Upgrades {s.partner.name}'s lineup for their title run. </>}
-                              {s.spare && <>They're {ordinal(s.spare.rank)} at {s.spare.pos}, so they can spare {s.get[0].name}. </>}
-                              {s.partnerLean === "Rebuilding" && s.youth.length === 0 && s.sellsVeteran && <>As a rebuilding team, they should be open to moving veterans. </>}
-                            </span>
-                            {s.need && <>For {team === myTeam ? "you" : team.name}: a {s.need.pos} room that's {ordinal(s.need.rank)} of {targets.n}. </>}
-                            {s.benched.length > 0 && <>Moves {s.benched.map((a) => a.name).join(" and ")} to the bench. </>}
-                            {s.result.verdict === "slight" ? "Slight overpay." : "Fair value."}
-                          </p>
-                          <button type="button" onClick={() => openTrade(s)} className="pill self-start text-xs rounded-full px-3 py-1 font-medium">
-                            Open in Trade Desk →</button>
-                        </li>
-                      );
-                    })}
+                    {group.map((s) => (
+                      <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets}
+                        forName={team === myTeam ? "you" : team.name} sleeperPlayers={sleeperPlayers} onView={viewTeam} onOpen={openTrade} />
+                    ))}
                   </ul>
                     )}
                   </div>
@@ -4668,7 +4808,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
             <ProjectedStandings proj={standings} raw={raw} teams={teams} myTeam={myTeam} team={team} onView={viewTeam} />
           )}
 
-          <ProfileSection title="Power rankings" aside={`${isDynasty ? "By total value: lineup, bench and picks" : "By this season's best lineup"} · click a team to see its roster`}>
+          <ProfileSection title="Power rankings" aside={`${isDynasty ? "By total value: lineup, bench and picks" : "By this season's best lineup"} · click a team for its strategy guide and roster`}>
             <div className="flex items-center gap-3 flex-wrap">
               {POS_KEYS.filter((k) => isDynasty || k !== "PICK").map((k) => (
                 <span key={k} className="text-xs flex items-center gap-1" style={{ color: "var(--text-secondary)" }}>
@@ -4686,7 +4826,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
                   <li key={t.rosterId} id={`team-${t.rosterId}`} className="border-b last:border-b-0"
                     style={{ borderColor: "var(--border)", scrollMarginTop: "5rem" }}>
                     <button type="button" onClick={() => toggleTeam(t.rosterId)} aria-expanded={openTeams.has(t.rosterId)}
-                      title={`${openTeams.has(t.rosterId) ? "Hide" : "Show"} ${t.name}'s roster`}
+                      title={`${openTeams.has(t.rosterId) ? "Hide" : "Show"} ${t.name}'s strategy guide and roster`}
                       className="row-btn w-full text-left py-2 px-1 grid gap-x-3 gap-y-1 items-center"
                       style={{ gridTemplateColumns: "1.5rem minmax(0, 1fr) auto", background: t === team || openTeams.has(t.rosterId) ? "var(--surface-2)" : undefined }}>
                       <span className="text-sm tabular-nums text-right" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
@@ -4717,6 +4857,11 @@ function MyLeagues({ settings, setSettings, navigate }) {
                         </span>
                       </span>
                     </button>
+                    {openTeams.has(t.rosterId) && t !== team && (
+                      <TeamStrategy team={t} teams={teams} league={raw.league} rows={values.rows} mode={mode} leanOf={leanOf}
+                        ranks={ranks} standing={standingOf[t.rosterId]} outForYear={outForYear} sleeperPlayers={sleeperPlayers}
+                        onView={viewTeam} onOpen={openTrade} />
+                    )}
                     {openTeams.has(t.rosterId) && <RosterBreakdown team={t} isDynasty={isDynasty} />}
                   </li>
                 );

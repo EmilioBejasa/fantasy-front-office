@@ -2998,6 +2998,34 @@ function leagueTags(league) {
   ].filter(Boolean).join(" · ");
 }
 
+// A league's scoring bonuses (TE premium aside, which has its own row), as
+// [{ label, pts, offense }]. Offensive ones are in Sleeper's projections or
+// estimated (withProjectedBonuses); defensive and IDP ones aren't projected.
+const BONUS_LABELS = {
+  bonus_rec_rb: "per RB catch", bonus_rec_wr: "per WR catch",
+  bonus_fd_qb: "per QB first down", bonus_fd_rb: "per RB first down", bonus_fd_wr: "per WR first down", bonus_fd_te: "per TE first down",
+  bonus_pass_yd_300: "300+ passing yds", bonus_pass_yd_400: "400+ passing yds",
+  bonus_rush_yd_100: "100+ rushing yds", bonus_rush_yd_200: "200+ rushing yds",
+  bonus_rec_yd_100: "100+ receiving yds", bonus_rec_yd_200: "200+ receiving yds",
+  bonus_rush_rec_yd_100: "100+ rushing + receiving yds", bonus_rush_rec_yd_200: "200+ rushing + receiving yds",
+  pass_cmp_40p: "40+ yd completion", rec_40p: "40+ yd catch", rush_40p: "40+ yd run",
+  pass_td_40p: "40+ yd passing TD", rec_td_40p: "40+ yd receiving TD", rush_td_40p: "40+ yd rushing TD",
+  bonus_pass_cmp_25: "25+ completions", bonus_rush_att_20: "20+ carries", bonus_rush_td_qb: "per QB rushing TD",
+  bonus_sack_2p: "2+ sacks", bonus_tkl_10p: "10+ tackles",
+  bonus_def_int_td_50p: "50+ yd INT return TD", bonus_def_fum_td_50p: "50+ yd fumble return TD",
+};
+// (Kickers' fgm_50p is a field goal's points by distance, not a bonus.)
+const isBonusKey = (k) => k !== "bonus_rec_te" && (k.startsWith("bonus_") || (/_40p$|_50p$/.test(k) && !k.startsWith("fg")));
+const BONUS_ORDER = Object.keys(BONUS_LABELS);
+const bonusRank = (k) => (BONUS_ORDER.includes(k) ? BONUS_ORDER.indexOf(k) : BONUS_ORDER.length);
+const leagueBonuses = (scoring) => Object.entries(scoring)
+  .filter(([k, v]) => v && isBonusKey(k))
+  .sort(([a], [b]) => bonusRank(a) - bonusRank(b))
+  .map(([k, v]) => ({
+    label: BONUS_LABELS[k] || k.replace(/^bonus_/, "").replace(/_/g, " "), pts: v,
+    offense: !/sack|tkl|def|idp|blk|ff|int_td|fum_td/.test(k),
+  }));
+
 // Each league setting, what it is, and how (or whether) it's used here.
 function leagueRules(league, mode) {
   const scoring = league.scoring_settings || {};
@@ -3009,6 +3037,7 @@ function leagueRules(league, mode) {
   const count = (k) => slots.filter((p) => p === k).length;
   const unvalued = [count("K") && "K", count("DEF") && "DEF", slots.some((p) => IDP_SLOTS.includes(p)) && "IDP"].filter(Boolean);
   const type = league.settings?.type;
+  const bonuses = leagueBonuses(scoring);
   return [
     { label: "Format", value: LEAGUE_TYPE_LABEL[type] || "Redraft",
       use: mode === s.mode ? `${mode === "dynasty" ? "Dynasty" : "Redraft"} values${type === 1 ? " (keepers value the future)" : ""}`
@@ -3024,6 +3053,10 @@ function leagueRules(league, mode) {
       use: s.tep ? "TE values boosted (this app's estimate)" : "–" },
     { label: "Passing TD", value: `${passTd} pts`,
       use: passTd > 4 ? "Not modeled: values assume 4, so QBs are worth a bit more here than shown" : "Standard" },
+    ...(bonuses.length ? [{ label: "Bonuses",
+      value: bonuses.map((b) => `${b.pts > 0 ? "+" : ""}${b.pts} ${b.label}`).join(" · "),
+      use: `Counted in projections and projected standings (estimated where Sleeper's projections leave them out${
+        bonuses.some((b) => !b.offense) ? "; defense and IDP bonuses aren't projected" : ""}); not in trade values` }] : []),
     { label: "Starters", value: lineupSummary(slots), use: "Each team's best lineup fills these slots" },
     { label: "Roster", value: [`${count("BN")} bench`, league.settings?.reserve_slots && `${league.settings.reserve_slots} IR`,
       league.settings?.taxi_slots && `${league.settings.taxi_slots} taxi`].filter(Boolean).join(" · "), use: "For reference" },

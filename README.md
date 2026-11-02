@@ -629,6 +629,8 @@ position rooms and lineup, bench, power rankings and the settings table:
   - QB (Superflex or 2QB both get Superflex values)
   - points per catch (nearest of PPR/half/std)
   - TE premium (the TEP estimate)
+  - bonuses (`leagueBonuses`: first downs, yardage milestones, 40+ yard plays and TDs, position catch bonuses, IDP
+    bonuses), counted in projections and projected standings but not in trade values
   - starting slots and roster size
 
   Settings FantasyCalc has no option for are listed but not modeled: 6-point passing TDs, and K/DEF/IDP slots.

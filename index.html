@@ -2981,6 +2981,9 @@ const IDP_SLOTS = ["DL", "LB", "DB", "IDP_FLEX"];
 const ROOM_POSITIONS = ["QB", "RB", "WR", "TE"];
 
 const leagueIdFromHash = () => (/^#\/leagues\/(\d+)/.exec(window.location.hash) || [])[1] || null;
+// #/leagues/<id>/trades is the league's trade targets page.
+const LEAGUE_TRADES = "trades";
+const leagueViewFromHash = () => (/^#\/leagues\/\d+\/trades\b/.test(window.location.hash) ? LEAGUE_TRADES : null);
 
 // "QB, 2 RB, 3 WR, TE, 2 Flex, Superflex"
 function lineupSummary(rosterPositions) {
@@ -3290,21 +3293,21 @@ function buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg) {
   return found.sort((a, b) => b.score - a.score);
 }
 
-// The league's trade market by position: who's worth buying, from the teams
-// most likely to sell, whichever team is asking.
+// The league's trade targets by position, for the trade targets page: who's
+// worth buying, from the teams most likely to sell, whichever team is asking.
 // - Win-now buys (for contenders): veterans (MARKET_VET_AGE and up) on
 //   rebuilding teams who score like starters (top MARKET_STARTERS × teams at
 //   their position in points per game), by points per game.
 // - Youth buys (for rebuilders): players 24 and under worth
 //   REBUILD_TARGET_MIN_SHARE of the top value on contending teams, the ones
 //   on the bench (no help to a title run) and buy-lows first, then by value.
-// Players out long-term and the asking team's own players are left out.
-const MARKET_PER_SIDE = 4;
+// Players out long-term are left out.
+const MARKET_PER_SIDE = 8;
 const MARKET_VET_AGE = 26;
 const MARKET_STARTERS = { QB: 1.5, RB: 2.5, WR: 3.5, TE: 1.5 };
-function tradeMarket(teams, leanOf, seasonPpg, rows, exclude) {
+function tradeMarket(teams, leanOf, seasonPpg, rows) {
   const topValue = rows[0]?.value || 1;
-  const of = (label) => teams.filter((t) => t !== exclude && leanOf(t)?.label === label);
+  const of = (label) => teams.filter((t) => leanOf(t)?.label === label);
   const sellers = of("Rebuilding"), buyers = of("Contender");
   const ppgOf = (p) => (seasonPpg?.[p.id]?.gp >= BUY_LOW_MIN_GAMES ? seasonPpg[p.id] : null);
   return {
@@ -3331,46 +3334,58 @@ function tradeMarket(teams, leanOf, seasonPpg, rows, exclude) {
   };
 }
 
-function TradeMarket({ market, onView, isDynasty }) {
-  const row = (m, side) => (
-    <li key={`${side}-${m.player.id}`} className="flex items-center justify-between gap-2 text-sm">
+// One bucket of the trade targets page: "win" (veterans on rebuilding teams,
+// by points per game) or "youth" (young players on contending teams), by position.
+function TradeBucket({ market, side, onView, myTeam }) {
+  const win = side === "win";
+  const row = (m) => (
+    <li key={m.player.id} className="flex items-center justify-between gap-2 text-sm">
       <span className="min-w-0 truncate">
         <PlayerLink id={m.player.id} pos={m.player.position} className="">{m.player.name}</PlayerLink>{" "}
         <PosBadge pos={m.player.position} rank={m.player.posRank} />
-        {isDynasty && m.player.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {m.player.age}</span>}
+        {m.player.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {m.player.age}</span>}
         {m.buyLow && <span className="text-xs font-semibold" style={{ color: "var(--series-red)" }}> ▼{Math.round(m.buyLow.dip * 100)}%</span>}
         {m.bench && <span className="text-xs" style={{ color: "var(--text-muted)" }}> bench</span>}
         <button type="button" onClick={() => onView(m.owner.rosterId)} className="block text-xs underline truncate"
-          style={{ color: "var(--text-secondary)" }}>{m.owner.name}</button>
+          style={{ color: m.owner === myTeam ? "var(--sport)" : "var(--text-secondary)" }}>
+          {m.owner.name}{m.owner === myTeam ? " (you)" : ""}</button>
       </span>
       <span className="text-xs tabular-nums shrink-0 text-right" style={{ color: "var(--text-secondary)" }}>
-        {side === "win" && m.stat ? `${m.stat.ppg.toFixed(1)} PPG` : fmtValue(m.player.value)}
-        {side === "win" && m.stat && <span className="block" style={{ color: "var(--text-muted)" }}>{ordinal(m.stat.rank)} {m.player.position}</span>}
+        {win ? `${m.stat.ppg.toFixed(1)} PPG` : fmtValue(m.player.value)}
+        <span className="block" style={{ color: "var(--text-muted)" }}>
+          {win ? `${ordinal(m.stat.rank)} ${m.player.position}` : m.stat ? `${m.stat.ppg.toFixed(1)} PPG` : ""}
+        </span>
       </span>
     </li>
   );
-  const column = (title, sub, list, side, empty) => (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{title}</span>
-      <span className="text-xs -mt-1" style={{ color: "var(--text-muted)" }}>{sub}</span>
-      {list.length ? <ul className="flex flex-col gap-1.5">{list.map((m) => row(m, side))}</ul>
-        : <span className="text-xs" style={{ color: "var(--text-muted)" }}>{empty}</span>}
-    </div>
-  );
+  const from = win ? market.sellers : market.buyers;
+  if (!from.length) {
+    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>No {win ? "rebuilding" : "contending"} teams to buy from right now.</p>;
+  }
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {market.positions.map(({ pos, winNow, youth }) => (
-        <div key={pos} className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-          <h4 className="text-sm font-semibold flex items-center gap-2"><PosBadge pos={pos} /></h4>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {column("If you're competing", "Veterans on rebuilding teams, by points per game", winNow, "win",
-              market.sellers.length ? `No ${pos} veterans scoring like starters on rebuilding teams.` : "No rebuilding teams to buy from.")}
-            {column("If you're rebuilding", "Young players on contending teams, bench and buy-lows first", youth, "youth",
-              market.buyers.length ? `No young ${pos}s to buy.` : "No contending teams to buy from.")}
-          </div>
-        </div>
-      ))}
-    </div>
+    <>
+      <p className="text-xs -mt-1" style={{ color: "var(--text-muted)" }}>
+        From {from.map((t, i) => (
+          <span key={t.rosterId}>{i > 0 && ", "}
+            <button type="button" onClick={() => onView(t.rosterId)} className="underline" style={{ color: "var(--text-secondary)" }}>
+              {t.name}{t === myTeam ? " (you)" : ""}</button>
+          </span>
+        ))}.
+      </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        {market.positions.map(({ pos, winNow, youth }) => {
+          const list = win ? winNow : youth;
+          return (
+            <div key={pos} className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+              <h4 className="text-sm font-semibold flex items-center gap-2"><PosBadge pos={pos} /></h4>
+              {list.length ? <ul className="flex flex-col gap-1.5">{list.map(row)}</ul>
+                : <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    {win ? `No ${pos} veterans scoring like starters.` : `No young ${pos}s worth building around.`}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -4629,17 +4644,19 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const [focus, setFocus] = useState(null);
   // #/leagues lists the leagues; #/leagues/<id> is that league's own page.
   const [leagueId, setLeagueId] = useState(leagueIdFromHash);
+  const [leagueView, setLeagueView] = useState(leagueViewFromHash);
   useEffect(() => {
-    const sync = () => setLeagueId(leagueIdFromHash());
+    const sync = () => { setLeagueId(leagueIdFromHash()); setLeagueView(leagueViewFromHash()); };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
     return () => { window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); };
   }, []);
-  const goTo = (id) => {
-    const hash = id ? `${LEAGUES_HASH}/${id}` : LEAGUES_HASH;
+  const goTo = (id, view = null) => {
+    const hash = id ? `${LEAGUES_HASH}/${id}${view ? `/${view}` : ""}` : LEAGUES_HASH;
     try { window.history.pushState(null, "", hash); } catch (e) {}
     lastRoom.nfl = { hash, label: "Boardroom" };
     setLeagueId(id ? String(id) : null);
+    setLeagueView(id ? view : null);
     window.scrollTo(0, 0);
   };
 
@@ -4687,8 +4704,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
   }, [leagueId]);
   useEffect(() => {
     document.title = leagueId && raw?.league.league_id === leagueId
-      ? `${raw.league.name} · Boardroom · Fantasy Front Office` : "Boardroom · Football · Fantasy Front Office";
-  }, [leagueId, raw]);
+      ? `${leagueView === LEAGUE_TRADES ? "Trade targets · " : ""}${raw.league.name} · Boardroom · Fantasy Front Office`
+      : "Boardroom · Football · Fantasy Front Office";
+  }, [leagueId, leagueView, raw]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -4756,17 +4774,14 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const leanOf = (t) => (isDynasty ? leanFor(t) : null);
   const teamLeanLabel = team && leanOf(team)?.label;
   const outForYear = useMemo(() => outForYearIds(values.rows, sleeperPlayers, resolveNflId), [values.rows, sleeperPlayers, resolveNflId]);
+  // Redraft: your lineup upgrades. Dynasty: the league's trade targets page.
   const targets = useMemo(
-    () => (team && raw ? suggestTrades(team, teams, raw.league, values.rows, mode, leanOf, outForYear) : null),
-    [team, teams, raw, values.rows, mode, teamLeanLabel, outForYear, standingOf]
-  );
-  const buyLows = useMemo(
-    () => (team && raw ? buyLowTargets(team, teams, raw.league, values.rows, mode, leanOf, seasonPpg) : []),
-    [team, teams, raw, values.rows, mode, teamLeanLabel, seasonPpg, standingOf]
+    () => (!isDynasty && team && raw ? suggestTrades(team, teams, raw.league, values.rows, mode, leanOf, outForYear) : null),
+    [isDynasty, team, teams, raw, values.rows, mode, teamLeanLabel, outForYear, standingOf]
   );
   const market = useMemo(
-    () => (isDynasty && team ? tradeMarket(teams, leanOf, seasonPpg, values.rows, team) : null),
-    [isDynasty, team, teams, seasonPpg, values.rows, standingOf]
+    () => (isDynasty && teams.length ? tradeMarket(teams, leanOf, seasonPpg, values.rows) : null),
+    [isDynasty, teams, seasonPpg, values.rows, standingOf]
   );
   // Other teams open as dropdowns in the power rankings; yours is the panel up top.
   const [openTeams, setOpenTeams] = useState(() => new Set());
@@ -4775,7 +4790,16 @@ function MyLeagues({ settings, setSettings, navigate }) {
     if (next.has(rosterId)) next.delete(rosterId); else next.add(rosterId);
     return next;
   });
+  const pendingTeam = useRef(null);
+  useEffect(() => {
+    if (leagueView || pendingTeam.current == null) return;
+    const rosterId = pendingTeam.current;
+    pendingTeam.current = null;
+    viewTeam(rosterId);
+  }, [leagueView]);
   const viewTeam = (rosterId) => {
+    // From the trade targets page, back to the league page with that team open.
+    if (leagueView) { pendingTeam.current = rosterId; goTo(leagueId); return; }
     if (rosterId === team?.rosterId) return document.getElementById("league-team")?.scrollIntoView({ behavior: "smooth" });
     setOpenTeams((s) => new Set(s).add(rosterId));
     setTimeout(() => document.getElementById(`team-${rosterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -4839,9 +4863,15 @@ function MyLeagues({ settings, setSettings, navigate }) {
         </>
       ) : (
         <>
-          <a href={LEAGUES_HASH} onClick={follow(() => goTo(null))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
-            ← All leagues
-          </a>
+          {leagueView ? (
+            <a href={leagueLink(leagueId)} onClick={follow(() => goTo(leagueId))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
+              ← {raw?.league.league_id === leagueId ? raw.league.name : "League"}
+            </a>
+          ) : (
+            <a href={LEAGUES_HASH} onClick={follow(() => goTo(null))} className="text-sm font-medium self-start" style={{ color: "var(--sport)" }}>
+              ← All leagues
+            </a>
+          )}
 
           {status.state === "loading" && <p className="text-sm py-3" style={{ color: "var(--text-muted)" }}>Loading league from Sleeper…</p>}
           {status.state === "error" && (
@@ -4850,7 +4880,39 @@ function MyLeagues({ settings, setSettings, navigate }) {
             </p>
           )}
 
-          {status.state === "ready" && raw && team && (
+          {status.state === "ready" && raw && team && leagueView === LEAGUE_TRADES && (
+        <>
+          <header>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Trade targets</h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>{raw.league.name} · {leagueTags(raw.league)}</p>
+          </header>
+          {!market ? (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Trade targets sort a dynasty league into buyers and sellers; this league is redraft. Your team's lineup
+              upgrades are on the league page.
+            </p>
+          ) : (
+            <>
+              <AboutData>
+                Every player worth trading for in the league, sorted by what the buying team is doing. A contender buys
+                veterans ({MARKET_VET_AGE} and up) from rebuilding teams, the ones scoring like starters this season, by points
+                per game. A rebuilder buys young players (24 and under, worth at least {Math.round(REBUILD_TARGET_MIN_SHARE * 100)}%
+                of the top value) from contending teams, who part most easily with the ones on their bench.{" "}
+                <span style={{ color: "var(--series-red)" }}>▼</span> marks a buy-low: young, expensive and down in price on a
+                slow stretch. Players out long-term are left out. Click a team to open its strategy guide.
+              </AboutData>
+              <ProfileSection title="If you're competing" aside="Veterans on rebuilding teams, by points per game">
+                <TradeBucket market={market} side="win" onView={viewTeam} myTeam={myTeam} />
+              </ProfileSection>
+              <ProfileSection title="If you're rebuilding" aside="Young players on contending teams, bench and buy-lows first">
+                <TradeBucket market={market} side="youth" onView={viewTeam} myTeam={myTeam} />
+              </ProfileSection>
+            </>
+          )}
+        </>
+          )}
+
+          {status.state === "ready" && raw && team && !leagueView && (
         <>
           <header className="flex items-end justify-between flex-wrap gap-3">
             <div className="min-w-0">
@@ -4942,27 +5004,18 @@ function MyLeagues({ settings, setSettings, navigate }) {
             })()}
 
             {targets && (
-              <ProfileSection title="Trade targets"
-                aside={targets.rebuild ? "Young players and injured players back next year, paid for with veterans"
-                  : leanOf(team)?.label === "Contender" ? "Biggest lineup upgrades this season"
-                  : targets.ageLean === "young" ? "Lineup upgrades that fit a young core"
-                  : targets.ageLean === "win-now" ? "Lineup upgrades for a veteran core" : "Biggest lineup upgrades"}>
+              <ProfileSection title="Trade targets" aside="Biggest lineup upgrades">
                 <p className="text-xs -mt-1" style={{ color: "var(--text-muted)" }}>
                   Deals built around the other team: each offer from {team === myTeam ? "your" : `${team.name}'s`} roster fills one
                   of their weak spots (or brings a rebuilder youth and picks, or upgrades a contender's lineup), for a player
                   from a position where they have plenty. Every offer is fair, or a slight overpay, by this app's trade formula.
-                  {buyLows.length > 0 && <> <span style={{ color: "var(--series-red)" }}>▼ Buy low</span> targets come first: young,
-                    expensive players whose price dipped on a slow stretch.</>}
                 </p>
-                {targets.list.length === 0 && buyLows.length === 0 ? (
+                {targets.list.length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                     No fair upgrades found: nobody available would improve this lineup for what {team === myTeam ? "you" : "they"} can offer.
                   </p>
                 ) : targets.positions.map(({ pos, rank }) => {
-                  // Buy-low targets lead each position; the usual targets fill in behind them.
-                  const lows = buyLows.filter((b) => b.player.position === pos).slice(0, TARGETS_PER_POSITION);
-                  const group = targets.list.filter((s) => s.get[0].position === pos && !lows.some((b) => b.player.id === s.get[0].id))
-                    .slice(0, TARGETS_PER_POSITION - lows.length);
+                  const group = targets.list.filter((s) => s.get[0].position === pos).slice(0, TARGETS_PER_POSITION);
                   return (
                   <div key={pos} className="flex flex-col gap-2">
                     <h4 className="text-sm font-semibold flex items-center gap-2">
@@ -4971,13 +5024,10 @@ function MyLeagues({ settings, setSettings, navigate }) {
                         {team === myTeam ? "Your" : `${team.name}'s`} room is {ordinal(rank)} of {targets.n}
                       </span>
                     </h4>
-                    {group.length === 0 && lows.length === 0 ? (
+                    {group.length === 0 ? (
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair {pos} targets found.</p>
                     ) : (
                   <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {lows.map((b) => (
-                      <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
-                    ))}
                     {group.map((s) => (
                       <TradeIdeaCard key={`${s.partner.rosterId}-${s.get[0].id}`} s={s} targets={targets}
                         forName={team === myTeam ? "you" : team.name} sleeperPlayers={sleeperPlayers} onView={viewTeam} onOpen={openTrade} />
@@ -5087,14 +5137,13 @@ function MyLeagues({ settings, setSettings, navigate }) {
           )}
 
           {market && (
-            <ProfileSection title="Trade market" aside="Who to buy at each position, from the teams most likely to sell">
+            <ProfileSection title="Trade targets" aside="Who to buy at each position, from the teams most likely to sell">
               <p className="text-xs -mt-1" style={{ color: "var(--text-muted)" }}>
-                Rebuilding teams should sell veterans who score now; contending teams will part with young players for
-                help this season, most easily the ones on their bench. {team === myTeam ? "Your" : `${team.name}'s`} own
-                players are left out, and so are players out long-term. <span style={{ color: "var(--series-red)" }}>▼</span> marks
-                a buy-low: young, expensive and down in price on a slow stretch.
+                Every trade target in the league on one page, in two buckets: veterans to buy if you're competing, young
+                players to buy if you're rebuilding.
               </p>
-              <TradeMarket market={market} onView={viewTeam} isDynasty={isDynasty} />
+              <a href={`${leagueLink(leagueId)}/${LEAGUE_TRADES}`} onClick={follow(() => goTo(leagueId, LEAGUE_TRADES))}
+                className="pill self-start text-xs rounded-full px-3 py-1 font-medium">See all trade targets →</a>
             </ProfileSection>
           )}
 

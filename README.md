@@ -531,7 +531,7 @@ The **Boardroom** (`MyLeagues`) has two kinds of page:
   instant.
 
 A league page values the league with **its own settings**, not the shared ones above. It loads a separate FantasyCalc
-value set through the same `useDynastyValues` cache. From top to bottom, the page has your team, trade targets,
+value set through the same `useDynastyValues` cache. From top to bottom, the page has your team, trade targets (redraft),
 position rooms and lineup, bench, power rankings and the settings table:
 
 - **Values follow the league's own type** (no switch): dynasty and keeper leagues use dynasty values and show each
@@ -562,15 +562,16 @@ position rooms and lineup, bench, power rankings and the settings table:
   a team in the mix leans young or win-now by its lineup's average age, or is told to pick a lane. In redraft it's
   just the weakest room to upgrade and the deepest to deal from. Your own team gets the same **Game plan** card under
   its lean.
-- **Trade market** (`tradeMarket`, dynasty only, between the standings and the power rankings): for each position,
-  who's worth buying league-wide, from the teams most likely to sell. **If you're competing**: veterans (26 and up)
-  on rebuilding teams who score like starters (top 1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game,
-  `MARKET_STARTERS`), by points per game. **If you're rebuilding**: players 24 and under worth 30%+ of the top value on
-  contending teams, bench players and buy-lows (▼) first, then by value. Up to four a side; your own players and
-  anyone out long-term are left out; team names open that team's dropdown.
-- **Buy low** (`buyLowTargets`, dynasty only) targets lead the trade targets: first in each position group on your
-  team panel (the usual targets fill in behind, three per position), and first in each strategy guide (up to three of
-  its four cards). Only ones with a fair offer are shown. A rebuilder's usual targets must also be worth 30% of the top
+- **Trade targets page** (`#/leagues/<id>/trades`, `tradeMarket` and `TradeBucket`, dynasty only; linked from the
+  league page between the standings and the power rankings): every trade target in the league, the same for every
+  team, in two buckets split by position. **If you're competing**: veterans (26 and up) on rebuilding teams who score
+  like starters (top 1.5/2.5/3.5/1.5 × teams at QB/RB/WR/TE in points per game, `MARKET_STARTERS`), by points per
+  game. **If you're rebuilding**: players 24 and under worth 30%+ of the top value on contending teams, bench players
+  and buy-lows (▼) first, then by value. Up to eight per position (`MARKET_PER_SIDE`); anyone out long-term is left
+  out; your own players are marked "(you)"; team names go back to the league page with that team's dropdown open.
+  In dynasty this replaces the trade targets on your team panel.
+- **Buy low** (`buyLowTargets`, dynasty only) targets come first in each strategy guide (up to three of its four
+  cards). Only ones with a fair offer are shown. A rebuilder's usual targets must also be worth 30% of the top
   value (`REBUILD_TARGET_MIN_SHARE`), not prospects far down the board. A buy-low is young (25 and under), expensive (40%+ of the top value) players on other teams whose KTC value dropped 3%+
   in 30 days while they score below their value, at least 4 spots (or 30% of their value rank) lower in points per
   game at their position than in value, over 3+ games. Points per game come from Sleeper's season stats
@@ -579,7 +580,8 @@ position rooms and lineup, bench, power rankings and the settings table:
   bench players first for a contender, never one of its own young players in a dip.
   Team names in the standings and trade ideas open (and scroll to) that team's dropdown. The panel up top is always
   your team; opened by league ID with no Sleeper user, a **Your team** menu picks which one that is.
-- **Trade targets** (`suggestTrades`) suggest deals for whichever team is shown, grouped by position (QB, RB, WR, TE) with up to three per position, weakest room first. Each deal is a player on another
+- **Trade targets** (`suggestTrades`) suggest deals for a team: on your team panel in redraft, and in each strategy
+  guide. They're grouped by position (QB, RB, WR, TE) with up to three per position, weakest room first. Each deal is a player on another
   team, alone or with a second player from that team, plus an offer from this roster that the Trade Desk's formula
   (`evaluateTrade`, same league size) calls fair or a slight overpay. Offers are the roster's 14 most valuable assets,
   one or two at a time; 2-for-2s are left to the Trade Desk. What counts as a better deal depends on the team:

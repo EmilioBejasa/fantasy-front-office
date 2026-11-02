@@ -687,10 +687,11 @@ A hand-curated list (`CLASS_2027` in `index.html`, like
 Superflex rookie-draft ranks, school, size and a short note. It's sorted by
 whichever format is selected. There's no live source for college
 prospects, so ranks and notes are copied from published rankings, listed in
-`CLASS_2027_SOURCES` and linked at the bottom of the tab. As of 2026-10-07
-it holds 31 prospects from DraftSharks' Oct 1, 2026 1QB and Superflex
-rankings and Yahoo's Sep 3, 2026 big board. Replace it wholesale as new
-rankings come out.
+`CLASS_2027_SOURCES` and linked at the bottom of the tab. As of 2026-11-02
+it holds the 36 prospects in The Big Board's Nov 2, 2026 top 30 in 1QB or
+Superflex, with its ranks; notes carried over from DraftSharks' Oct 1
+rankings and Yahoo's Sep 3 big board. Schools are where ESPN lists each
+player now. Replace it wholesale as new rankings come out.
 
 The top of the tab is live: what each 2027 1st and 2nd (early/mid/late) is
 worth right now, and the player with the closest value. Each prospect also

@@ -5842,48 +5842,54 @@ function TradeCalculator({ data, settings, setSettings }) {
 // Hand-curated, like WAIVER_TARGETS: the top 2027 dynasty rookie prospects
 // (college players eligible for the April 2027 NFL draft). There's no live
 // API for college prospects, so ranks and notes are copied from published
-// rankings, listed in CLASS_2027_SOURCES. Update the list wholesale as new
+// rankings, listed in CLASS_2027_SOURCES (ranks from the first one). Update the list wholesale as new
 // rankings come out rather than inventing anything. `rank1qb` / `rankSf` are
 // the source's 1QB and Superflex rookie-draft ranks (null = outside its top
 // 30 in that format); `size` is height-weight where a source listed it.
-const CLASS_2027_UPDATED_ON = "2026-10-07";
+const CLASS_2027_UPDATED_ON = "2026-11-02";
 const CLASS_2027_SOURCES = [
+  { label: "The Big Board 2027 dynasty rookie rankings (1QB and Superflex; the ranks here), Nov 2 2026", url: "https://www.thebigboard.gg/dynasty/rookie-rankings-2027" },
   { label: "DraftSharks 2027 rookie rankings (1QB), Oct 1 2026", url: "https://www.draftsharks.com/article/2027-rookie-rankings" },
   { label: "DraftSharks 2027 Superflex rookie rankings, Oct 1 2026", url: "https://www.draftsharks.com/article/2027-superflex-rookie-rankings" },
   { label: "Yahoo Sports 2027 NFL draft big board, Sep 3 2026", url: "https://sports.yahoo.com/articles/nfl-draft-prospects-2027-big-055001967.html" },
 ];
 const CLASS_2027 = [
   { name: "Jeremiah Smith", espnId: "5079720", position: "WR", school: "Ohio State", size: "6-3, 223", rank1qb: 1, rankSf: 1, note: "617 yards and 7 TDs in four games this season. No. 1 on every board in both formats." },
-  { name: "Cam Coleman", espnId: "5079376", position: "WR", school: "Texas", size: "6-3, 201", rank1qb: 2, rankSf: 4, note: "Auburn transfer, now catching passes from Arch Manning. Up-and-down start to 2026." },
-  { name: "Charlie Becker", espnId: "5146735", position: "WR", school: "Indiana", size: "6-4, 207", rank1qb: 3, rankSf: 6, note: "Former track athlete with size and sure hands. 6 TDs in his first four games." },
-  { name: "Jadan Baugh", espnId: "5079322", position: "RB", school: "Florida", size: "6-1, 225", rank1qb: 4, rankSf: 7, note: "1,170 yards and 8 TDs in 2025, then 600 yards and 11 TDs through four games this year. Catches the ball too." },
-  { name: "KJ Duff", espnId: "5084771", position: "WR", school: "Rutgers", size: "6-6, 225", rank1qb: 5, rankSf: 8, note: "550 yards and 7 TDs in four games. Route running is still developing." },
-  { name: "Kewan Lacy", espnId: "5086388", position: "RB", school: "Ole Miss", size: "5-11, 205", rank1qb: 6, rankSf: 9, note: "1,567 yards and 24 rushing TDs as a starter, plus 29 catches. Compact, durable power back." },
-  { name: "Jamari Johnson", espnId: "4922988", position: "TE", school: "Oregon", size: "6-5, 257", rank1qb: 7, rankSf: 11, note: "A natural receiver for his size who outplayed Oregon's other tight end late in 2025." },
-  { name: "Nick Marsh", espnId: "5079600", position: "WR", school: "Indiana", size: "6-3, 213", rank1qb: 8, rankSf: 12, note: "Michigan State transfer who led his team in receiving the past two seasons." },
-  { name: "Trey'Dez Green", espnId: "5079420", position: "TE", school: "LSU", size: "6-7, 237", rank1qb: 9, rankSf: 13, note: "Red-zone weapon with 7 TDs in 2025. Knee sprain and bone bruise early this season." },
-  { name: "Reed Harris", espnId: "5031157", position: "WR", school: "Arizona State", size: "6-5, 220", rank1qb: 10, rankSf: 14, note: "19 catches for 374 yards and 5 TDs in his first three games." },
-  { name: "TJ Moore", espnId: "5218753", position: "WR", school: "Clemson", size: null, rank1qb: 11, rankSf: null, note: "" },
-  { name: "Ahmad Hardy", espnId: "5197065", position: "RB", school: "Missouri", size: "5-10, 206", rank1qb: 12, rankSf: 15, note: "Yahoo's top pure power back in the class." },
-  { name: "Dante Moore", espnId: "4870921", position: "QB", school: "Oregon", size: null, rank1qb: 13, rankSf: 2, note: "Came back for another year. Completing 71.8% of his passes, but had a head injury early this season." },
-  { name: "Trinidad Chambliss", espnId: "4911529", position: "QB", school: "Ole Miss", size: "6-0, 200", rank1qb: 14, rankSf: 3, note: "363 yards and 3 total TDs against LSU. Arm and athleticism are strong; size is the main knock." },
-  { name: "Ryan Coleman-Williams", espnId: "5141711", position: "WR", school: "Alabama", size: "6-0, 182", rank1qb: 15, rankSf: 18, note: "Questions about consistency with his hands and routes." },
-  { name: "Bryant Wesco Jr.", espnId: "5112674", position: "WR", school: "Clemson", size: "6-2, 195", rank1qb: 16, rankSf: 19, note: "" },
-  { name: "Darian Mensah", espnId: "5121169", position: "QB", school: "Miami", size: "6-3, 205", rank1qb: 17, rankSf: 5, note: "1,211 yards, 14 TDs and no interceptions through four games." },
-  { name: "Mark Fletcher Jr.", espnId: "4870736", position: "RB", school: "Miami", size: "6-2, 225", rank1qb: 18, rankSf: 20, note: "" },
-  { name: "Antwan Raymond", espnId: "5209945", position: "RB", school: "Rutgers", size: null, rank1qb: 19, rankSf: 21, note: "" },
-  { name: "Arch Manning", espnId: "4870906", position: "QB", school: "Texas", size: null, rank1qb: 20, rankSf: 10, note: "13 TDs and 2 INTs over his last six games of 2025. Yahoo has him No. 2 overall in the NFL draft." },
-  { name: "LJ Martin", espnId: "4918126", position: "RB", school: "BYU", size: null, rank1qb: 21, rankSf: 23, note: "" },
-  { name: "Isaiah Sategna III", espnId: "5080703", position: "WR", school: "Oklahoma", size: null, rank1qb: 22, rankSf: 26, note: "" },
-  { name: "Omarion Miller", espnId: "4870850", position: "WR", school: "Arizona State", size: "6-2, 210", rank1qb: 23, rankSf: 27, note: "" },
-  { name: "Drew Mestemaker", espnId: "5219834", position: "QB", school: "Oklahoma State", size: null, rank1qb: 24, rankSf: 16, note: "Yahoo singles out his arm strength." },
-  { name: "CJ Carr", espnId: "5079369", position: "QB", school: "Notre Dame", size: null, rank1qb: 25, rankSf: 17, note: "Seen as the most pro-ready QB, running a pro-style play-action offense." },
-  { name: "Cameron Dickey", espnId: "5193580", position: "RB", school: "Texas Tech", size: null, rank1qb: 26, rankSf: 28, note: "" },
-  { name: "Mario Craver", espnId: "5079345", position: "WR", school: "Texas A&M", size: "5-9, 165", rank1qb: 27, rankSf: 29, note: "" },
-  { name: "Duce Robinson", espnId: "4870922", position: "WR", school: "Florida State", size: "6-6, 230", rank1qb: 28, rankSf: 30, note: "" },
-  { name: "Jayden Maiava", espnId: "4685454", position: "QB", school: "USC", size: "6-4, 230", rank1qb: null, rankSf: 22, note: "" },
+  { name: "Jadan Baugh", espnId: "5079322", position: "RB", school: "Florida", size: "6-1, 225", rank1qb: 2, rankSf: 8, note: "1,170 yards and 8 TDs in 2025, then 600 yards and 11 TDs through four games this year. Catches the ball too." },
+  { name: "Ryan Coleman-Williams", espnId: "5141711", position: "WR", school: "Alabama", size: "6-0, 182", rank1qb: 3, rankSf: 5, note: "Questions about consistency with his hands and routes." },
+  { name: "Ahmad Hardy", espnId: "5197065", position: "RB", school: "Missouri", size: "5-10, 206", rank1qb: 4, rankSf: 9, note: "Yahoo's top pure power back in the class." },
+  { name: "Cam Coleman", espnId: "5079376", position: "WR", school: "Texas", size: "6-3, 201", rank1qb: 5, rankSf: 6, note: "Auburn transfer, now catching passes from Arch Manning. Up-and-down start to 2026." },
+  { name: "Nate Frazier", espnId: "5084047", position: "RB", school: "Georgia", size: null, rank1qb: 6, rankSf: 10, note: "" },
+  { name: "Isaac Brown", espnId: "5079349", position: "RB", school: "Louisville", size: null, rank1qb: 7, rankSf: 14, note: "" },
+  { name: "KJ Duff", espnId: "5084771", position: "WR", school: "Rutgers", size: "6-6, 225", rank1qb: 8, rankSf: 11, note: "550 yards and 7 TDs in four games. Route running is still developing." },
+  { name: "Trey'Dez Green", espnId: "5079420", position: "TE", school: "LSU", size: "6-7, 237", rank1qb: 9, rankSf: 28, note: "Red-zone weapon with 7 TDs in 2025. Knee sprain and bone bruise early this season." },
+  { name: "Kewan Lacy", espnId: "5086388", position: "RB", school: "Ole Miss", size: "5-11, 205", rank1qb: 10, rankSf: 16, note: "1,567 yards and 24 rushing TDs as a starter, plus 29 catches. Compact, durable power back." },
+  { name: "Mario Craver", espnId: "5079345", position: "WR", school: "Texas A&M", size: "5-9, 165", rank1qb: 11, rankSf: 13, note: "" },
+  { name: "Jamari Johnson", espnId: "4922988", position: "TE", school: "Oregon", size: "6-5, 257", rank1qb: 12, rankSf: null, note: "A natural receiver for his size who outplayed Oregon's other tight end late in 2025." },
+  { name: "Mark Fletcher Jr.", espnId: "4870736", position: "RB", school: "Miami", size: "6-2, 225", rank1qb: 13, rankSf: 18, note: "" },
+  { name: "Hollywood Smothers", espnId: "4871053", position: "RB", school: "Texas", size: null, rank1qb: 14, rankSf: 21, note: "" },
+  { name: "LJ Martin", espnId: "4918126", position: "RB", school: "BYU", size: null, rank1qb: 15, rankSf: 22, note: "" },
+  { name: "Charlie Becker", espnId: "5146735", position: "WR", school: "Indiana", size: "6-4, 207", rank1qb: 16, rankSf: 17, note: "Former track athlete with size and sure hands. 6 TDs in his first four games." },
+  { name: "Darius Taylor", espnId: "4920901", position: "RB", school: "Minnesota", size: null, rank1qb: 17, rankSf: 23, note: "" },
+  { name: "Nick Marsh", espnId: "5079600", position: "WR", school: "Indiana", size: "6-3, 213", rank1qb: 18, rankSf: 19, note: "Michigan State transfer who led his team in receiving the past two seasons." },
+  { name: "Justice Haynes", espnId: "4870760", position: "RB", school: "Georgia Tech", size: null, rank1qb: 19, rankSf: 26, note: "" },
+  { name: "J'Koby Williams", espnId: "5086393", position: "RB", school: "Texas Tech", size: null, rank1qb: 20, rankSf: 25, note: "" },
+  { name: "Dante Moore", espnId: "4870921", position: "QB", school: "Oregon", size: null, rank1qb: 21, rankSf: 2, note: "Came back for another year. Completing 71.8% of his passes, but had a head injury early this season." },
+  { name: "Julian Sayin", espnId: "5079712", position: "QB", school: "Ohio State", size: null, rank1qb: 22, rankSf: 3, note: "Record 78.9% completion rate as a freshman starter in 2025, but questions about his arm strength and running." },
+  { name: "Arch Manning", espnId: "4870906", position: "QB", school: "Texas", size: null, rank1qb: 23, rankSf: 4, note: "13 TDs and 2 INTs over his last six games of 2025. Yahoo has him No. 2 overall in the NFL draft." },
+  { name: "Raleek Brown", espnId: "4685268", position: "RB", school: "Texas", size: null, rank1qb: 24, rankSf: 30, note: "" },
+  { name: "Jahiem White", espnId: "4911971", position: "RB", school: "North Texas", size: null, rank1qb: 25, rankSf: null, note: "" },
+  { name: "Darian Mensah", espnId: "5121169", position: "QB", school: "Miami", size: "6-3, 205", rank1qb: 26, rankSf: 7, note: "1,211 yards, 14 TDs and no interceptions through four games." },
+  { name: "Eric Singleton Jr.", espnId: "5095360", position: "WR", school: "Florida", size: null, rank1qb: 27, rankSf: null, note: "" },
+  { name: "Ryan Wingo", espnId: "5218633", position: "WR", school: "Texas", size: null, rank1qb: 28, rankSf: null, note: "" },
+  { name: "Nic Anderson", espnId: "4699866", position: "WR", school: "Kentucky", size: null, rank1qb: 29, rankSf: null, note: "" },
+  { name: "Terrance Carter Jr.", espnId: "4867887", position: "TE", school: "Texas Tech", size: null, rank1qb: 30, rankSf: null, note: "" },
+  { name: "CJ Carr", espnId: "5079369", position: "QB", school: "Notre Dame", size: null, rank1qb: null, rankSf: 12, note: "Seen as the most pro-ready QB, running a pro-style play-action offense." },
+  { name: "John Mateer", espnId: "4915980", position: "QB", school: "Oklahoma", size: null, rank1qb: null, rankSf: 15, note: "" },
+  { name: "Jayden Maiava", espnId: "4685454", position: "QB", school: "USC", size: "6-4, 230", rank1qb: null, rankSf: 20, note: "" },
   { name: "LaNorris Sellers", espnId: "4875127", position: "QB", school: "South Carolina", size: "6-3, 240", rank1qb: null, rankSf: 24, note: "The class's best dual-threat QB, with a projected mid-4.5 40-yard dash." },
-  { name: "Julian Sayin", espnId: "5079712", position: "QB", school: "Ohio State", size: null, rank1qb: null, rankSf: 25, note: "Record 78.9% completion rate as a freshman starter in 2025, but questions about his arm strength and running." },
+  { name: "Drew Mestemaker", espnId: "5219834", position: "QB", school: "Oklahoma State", size: null, rank1qb: null, rankSf: 27, note: "Yahoo singles out his arm strength." },
+  { name: "Byrum Brown", espnId: "4880272", position: "QB", school: "Auburn", size: null, rank1qb: null, rankSf: 29, note: "" },
 ];
 
 // Which 2027 rookie pick a prospect at a given rank would cost in a

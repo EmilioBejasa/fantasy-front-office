@@ -3166,6 +3166,164 @@ const lineupTotal = (assets, slots, val) =>
     .reduce((s, l) => s + (l.player?.value || 0), 0);
 const avgAge = (assets) => sumOf(assets.map((a) => (a.position === "PICK" ? PICK_AGE : a.age ?? 26))) / assets.length;
 
+// This season's points per game for every QB/RB/WR/TE, in the league's own
+// scoring (Sleeper's season totals carry the bonus stats too), and each
+// player's rank by it at his position among those with BUY_LOW_MIN_GAMES
+// games. { [sleeperId]: { ppg, gp, rank } }; null until it loads.
+const BUY_LOW_MIN_GAMES = 3;
+const seasonStatsCache = new Map();
+function useSeasonPpg(league) {
+  const [stats, setStats] = useState(null);
+  const season = league?.season;
+  useEffect(() => {
+    if (!season) return;
+    let cancelled = false;
+    if (!seasonStatsCache.has(season)) {
+      const qs = ROOM_POSITIONS.map((p) => `position[]=${p}`).join("&");
+      const promise = fetch(`https://api.sleeper.com/stats/nfl/${season}?season_type=regular&${qs}`)
+        .then((res) => { if (!res.ok) throw new Error(`Sleeper stats failed (${res.status})`); return res.json(); });
+      promise.catch(() => seasonStatsCache.delete(season));
+      seasonStatsCache.set(season, promise);
+    }
+    seasonStatsCache.get(season).then((list) => { if (!cancelled) setStats(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [season]);
+  return useMemo(() => {
+    if (!stats || !league) return null;
+    const scoring = league.scoring_settings || {};
+    const out = {};
+    const byPos = {};
+    for (const r of stats) {
+      const gp = r.stats?.gp || 0;
+      if (!gp) continue;
+      out[r.player_id] = { ppg: scoreStats(r.stats, scoring) / gp, gp, rank: null };
+      if (gp >= BUY_LOW_MIN_GAMES) (byPos[r.player?.position] ||= []).push(r.player_id);
+    }
+    for (const ids of Object.values(byPos)) ids.sort((a, b) => out[b].ppg - out[a].ppg).forEach((id, i) => { out[id].rank = i + 1; });
+    return out;
+  }, [stats, league]);
+}
+
+// Buy-low targets: young, expensive players on other teams whose market value
+// has dipped because they're scoring below what they're valued at:
+// - BUY_LOW_MAX_AGE or younger and worth BUY_LOW_MIN_SHARE of the top value;
+// - down BUY_LOW_MIN_DIP or more over the last 30 days;
+// - ranked well below their value at their position in points per game
+//   (at least BUY_LOW_MIN_GAP spots, or 30% of their value rank), over
+//   BUY_LOW_MIN_GAMES games or more;
+// - not out long-term (that's an injury discount, which trade targets cover).
+// Each comes with the offer from this team's roster that this app's trade
+// formula calls fair (or a slight overpay) and costs it least: veterans first
+// for a rebuilder, picks and bench players first for a contender, otherwise
+// whatever takes least from the lineup, and never one of the team's own young
+// players in a dip (no selling low to buy low). Ranked by dip × value × how far
+// they're underperforming.
+const BUY_LOW_MAX_AGE = 25;
+const BUY_LOW_MIN_SHARE = 0.4;
+const BUY_LOW_MIN_DIP = 0.03;
+const BUY_LOW_MIN_GAP = 4;
+const BUY_LOW_COUNT = 4;
+function buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg) {
+  if (!seasonPpg || mode !== "dynasty") return [];
+  const slots = league.roster_positions;
+  const lean = leanOf(team)?.label;
+  const ctx = {
+    topValue: rows[0]?.value || 1,
+    playerValues: rows.filter((r) => r.position !== "PICK").map((r) => r.value),
+    teams: settingsFromLeague(league).teams,
+  };
+  const out = new Set(team.longTermOut || []);
+  const lineupOf = (assets) => lineupTotal(assets.filter((a) => !out.has(a.id)), slots, (a) => a.value);
+  const base = lineupOf(team.assets);
+  const starting = new Set(team.lineup.map((l) => l.player?.id).filter(Boolean));
+  const dipOf = (a) => (a.trend30 < 0 ? -a.trend30 / (a.value - a.trend30) : 0);
+  // Never sell low to buy low: the team's own young players in a dip stay put.
+  const pool = team.assets.filter((a) => !(a.position !== "PICK" && (a.age ?? 99) <= BUY_LOW_MAX_AGE && dipOf(a) >= BUY_LOW_MIN_DIP))
+    .slice(0, OFFER_POOL);
+  const offers = [];
+  pool.forEach((a, i) => { offers.push([a]); pool.slice(i + 1).forEach((b) => offers.push([a, b])); });
+  // What an offer costs this team (lower is better).
+  const cost = (give) => {
+    const loss = base - lineupOf(team.assets.filter((a) => !give.includes(a)));
+    if (lean === "Rebuilding") return loss * 0.2 - avgAge(give) * 400;
+    if (lean === "Contender") return loss + sumOf(give.map((a) => (a.position === "PICK" || !starting.has(a.id) ? 0 : a.value * 0.3)));
+    return loss;
+  };
+
+  const found = [];
+  for (const other of teams) {
+    if (other === team) continue;
+    for (const p of other.assets) {
+      if (p.position === "PICK" || (p.age ?? 99) > BUY_LOW_MAX_AGE || p.value < ctx.topValue * BUY_LOW_MIN_SHARE) continue;
+      if (other.sidelined?.[p.id]?.longTerm) continue;
+      const dip = dipOf(p);
+      if (dip < BUY_LOW_MIN_DIP) continue;
+      const stat = seasonPpg[p.id];
+      if (!stat?.rank || !p.posRank) continue;
+      const gap = stat.rank - p.posRank;
+      if (gap < Math.max(BUY_LOW_MIN_GAP, p.posRank * 0.3)) continue;
+      let best = null;
+      for (const give of offers) {
+        const giveSum = sumOf(give.map((a) => a.value));
+        if (giveSum < p.value * 0.6 || giveSum > p.value * 1.8) continue;
+        const result = evaluateTrade([[p.value], give.map((a) => a.value)], ctx);
+        if (!(result.verdict === "fair" || (result.verdict === "slight" && result.winner === 1))) continue;
+        const c = cost(give);
+        if (!best || c < best.cost) best = { give, result, cost: c };
+      }
+      found.push({ player: p, partner: other, dip, gap, stat, offer: best, score: dip * p.value * Math.min(3, gap / Math.max(1, p.posRank)) });
+    }
+  }
+  return found.sort((a, b) => b.score - a.score).slice(0, BUY_LOW_COUNT);
+}
+
+// One buy-low target: why the price is down, and a fair offer for him.
+function BuyLowCard({ b, onView, onOpen, sleeperPlayers }) {
+  const p = b.player;
+  const status = sleeperPlayers[p.id]?.status;
+  return (
+    <li className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0">
+          <span className="block text-sm">
+            <PlayerLink id={p.id} pos={p.position}>{p.name}</PlayerLink>{" "}
+            <PosBadge pos={p.position} rank={p.posRank} />
+            {p.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {p.age}</span>}
+            {status && ["Out", "Doubtful", "Questionable"].includes(status) && (
+              <span className="text-xs font-semibold ml-1" style={{ color: REPORT_STATUS_COLOR[status] || "var(--series-red)" }}>{status}</span>
+            )}
+          </span>
+          <button type="button" onClick={() => onView(b.partner.rosterId)} className="text-xs underline"
+            style={{ color: "var(--text-secondary)" }}>from {b.partner.name}</button>
+        </span>
+        <span className="text-xs font-semibold tabular-nums shrink-0 text-right" style={{ color: "var(--series-red)" }}>
+          ▼ {Math.round(b.dip * 100)}% in 30 days
+        </span>
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+        Valued {p.position}{p.posRank}, but {ordinal(b.stat.rank)} among {p.position}s in points per game
+        ({b.stat.ppg.toFixed(1)} over {b.stat.gp} games). Young and still valued like a starter, so a slow
+        stretch is the cheapest time to buy.
+      </p>
+      {b.offer ? (
+        <>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            <span className="font-semibold" style={{ color: "var(--text-muted)" }}>OFFER </span>
+            {b.offer.give.map((a, j) => (
+              <span key={j}>{j > 0 && " + "}{a.name} <span style={{ color: "var(--text-muted)" }}>({fmtValue(a.value)})</span></span>
+            ))}
+            <span style={{ color: "var(--text-muted)" }}> for {fmtValue(p.value)}. {b.offer.result.verdict === "slight" ? "Slight overpay." : "Fair value."}</span>
+          </p>
+          <button type="button" onClick={() => onOpen({ get: [p], give: b.offer.give })} className="pill self-start text-xs rounded-full px-3 py-1 font-medium">
+            Open in Trade Desk →</button>
+        </>
+      ) : (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>No fair offer from this roster at that price.</p>
+      )}
+    </li>
+  );
+}
+
 // Deals are built around the trade partner: every offer has to fix
 // something for them (partnerHelps), and the score leans hardest on how much
 // it does, then on taking from a room where they have plenty, then on this
@@ -4278,11 +4436,13 @@ function GamePlan({ plan, isDynasty }) {
 const GUIDE_TARGETS = 3;
 // A team's strategy guide in the power rankings: where it stands, its game
 // plan, and its best few trade targets (suggestTrades, worked out on open).
-function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing, outForYear, sleeperPlayers, onView, onOpen }) {
+function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing, outForYear, sleeperPlayers, seasonPpg, onView, onOpen }) {
   const isDynasty = mode === "dynasty";
   const lean = leanOf(team);
   const plan = teamGamePlan(team, teams, { isDynasty, lean, leanOf, ranks, outForYear });
   const targets = useMemo(() => suggestTrades(team, teams, league, rows, mode, leanOf, outForYear), [team, teams, league, rows, mode, outForYear]);
+  const buyLows = useMemo(() => buyLowTargets(team, teams, league, rows, mode, leanOf, seasonPpg).slice(0, GUIDE_TARGETS),
+    [team, teams, league, rows, mode, seasonPpg]);
   const best = [...targets.list].sort((a, b) => b.score - a.score).slice(0, GUIDE_TARGETS);
   const n = teams.length;
   const where = [
@@ -4315,6 +4475,16 @@ function TeamStrategy({ team, teams, league, rows, mode, leanOf, ranks, standing
           </ul>
         )}
       </div>
+      {buyLows.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+            Buy low · young players whose price dipped
+          </span>
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {buyLows.map((b) => <BuyLowCard key={b.player.id} b={b} onView={onView} onOpen={onOpen} sleeperPlayers={sleeperPlayers} />)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -4457,6 +4627,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const showStandings = !!raw && raw.league.settings?.type !== 3 && raw.league.status !== "pre_draft";
   const standings = useProjectedStandings(raw, showStandings);
   const matchups = useWeekMatchups(raw, showStandings);
+  const seasonPpg = useSeasonPpg(showStandings ? raw?.league : null);
   const standingOf = useMemo(() => {
     const now = standings.now || [];
     const playoffTeams = Math.min(raw?.league.settings?.playoff_teams || 0, now.length);
@@ -4497,6 +4668,10 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const targets = useMemo(
     () => (team && raw ? suggestTrades(team, teams, raw.league, values.rows, mode, leanOf, outForYear) : null),
     [team, teams, raw, values.rows, mode, teamLeanLabel, outForYear, standingOf]
+  );
+  const buyLows = useMemo(
+    () => (team && raw ? buyLowTargets(team, teams, raw.league, values.rows, mode, leanOf, seasonPpg) : []),
+    [team, teams, raw, values.rows, mode, teamLeanLabel, seasonPpg, standingOf]
   );
   // Other teams open as dropdowns in the power rankings; yours is the panel up top.
   const [openTeams, setOpenTeams] = useState(() => new Set());
@@ -4712,6 +4887,16 @@ function MyLeagues({ settings, setSettings, navigate }) {
               </ProfileSection>
             )}
 
+            {buyLows.length > 0 && (
+              <ProfileSection title="Buy low" aside="Young, expensive players whose price dipped on a slow stretch">
+                <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {buyLows.map((b) => (
+                    <BuyLowCard key={b.player.id} b={b} onView={viewTeam} onOpen={openTrade} sleeperPlayers={sleeperPlayers} />
+                  ))}
+                </ul>
+              </ProfileSection>
+            )}
+
             <div className="grid gap-4 md:grid-cols-2">
               <ProfileSection title="Position rooms" aside={`Rank of ${n} · vs league average`}>
                 <ul className="flex flex-col gap-2.5">
@@ -4859,7 +5044,7 @@ function MyLeagues({ settings, setSettings, navigate }) {
                     </button>
                     {openTeams.has(t.rosterId) && t !== team && (
                       <TeamStrategy team={t} teams={teams} league={raw.league} rows={values.rows} mode={mode} leanOf={leanOf}
-                        ranks={ranks} standing={standingOf[t.rosterId]} outForYear={outForYear} sleeperPlayers={sleeperPlayers}
+                        ranks={ranks} standing={standingOf[t.rosterId]} outForYear={outForYear} sleeperPlayers={sleeperPlayers} seasonPpg={seasonPpg}
                         onView={viewTeam} onOpen={openTrade} />
                     )}
                     {openTeams.has(t.rosterId) && <RosterBreakdown team={t} isDynasty={isDynasty} />}

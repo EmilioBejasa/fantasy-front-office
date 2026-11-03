@@ -387,6 +387,35 @@ So the hand list only needs editing to add details Sleeper doesn't have: a
 better injury description, a stint's real start week, or a season-ending
 call for another injury.
 
+**Before editing it, run `node scripts/check-injuries.js`** (after
+`node scripts/refresh-players.js` for the newest designations). It changes
+nothing. It reads `INJURED_RESERVE`, `data/nfl-players.js` and
+`data/nfl-scores.js`, then lists:
+- entries Sleeper shows as healthy again;
+- entries for players who scored after their `sinceWeek`;
+- stints past their earliest return that are still listed;
+- pool players Sleeper has on IR/PUP that aren't hand-listed;
+- one-word injury descriptions.
+
+`--week N` overrides the upcoming week. The logic is `checkInjuries`, which is tested in `tests/app.test.js`.
+
+The rest of the page:
+- **Return watch** (`returnWatch`) lists IR/PUP stints whose earliest return
+  is this week or next (`waiverWeek`), plus hand-listed IR players Sleeper
+  now has as Questionable or Doubtful (back at practice). Season-ending ones
+  are left out.
+- **Changed since you last looked** (`useInjuryChanges`) compares Sleeper's
+  statuses for the report pool with the ones this browser saved on its last
+  visit (`ff-valuediff:injury-seen-v1`, the same `diffStatuses` as the
+  roster alerts). It keeps 3 days of changes. Saved statuses are merged, not
+  replaced, so players who load later (the scores' extras) keep their
+  history.
+- **With a Sleeper league connected** (from the Waiver Wire), your players (★)
+  come first in every list, other teams' players are tagged *Rostered*, and
+  an *All players | My team* toggle (saved per browser) filters everything
+  to your roster. Return watch adds a note: "activate from IR when cleared"
+  for yours, "stash candidate" for unrostered ones.
+
 ## Dynasty tabs
 
 **Values default to KeepTradeCut.** Every football value in the app (War

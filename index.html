@@ -679,7 +679,7 @@ const ALL_WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
 // `sinceWeek` through the earliest week they're allowed back (see irReturnWeek),
 // or through Week 18 when `seasonEnding` is set. `sinceWeek` is the first game
 // of their current absence — 1 for players who started the season there.
-const INJURED_RESERVE_UPDATED_ON = "2026-11-02";
+const INJURED_RESERVE_UPDATED_ON = "2026-11-03";
 const INJURED_RESERVE = [
   { id: "achane", list: "IR", injury: "Torn ACL", sinceWeek: 4, seasonEnding: true },
   { id: "dart", list: "IR", injury: "Knee (MCL, PCL, meniscus surgery)", sinceWeek: 3, seasonEnding: true },
@@ -694,7 +694,7 @@ const INJURED_RESERVE = [
   { id: "pacheco", list: "IR", injury: "Back", sinceWeek: 1 },
   { id: "tonges-jake", list: "IR", injury: "Knee", sinceWeek: 2 },
   { id: "pearsall-ricky", list: "IR", injury: "Knee (PCL surgery)", sinceWeek: 1, seasonEnding: true },
-  { id: "kalinic-nikola", list: "IR", injury: "Knee", sinceWeek: 1 },
+  { id: "kalinic-nikola", list: "IR", injury: "Right knee (preseason; reverted to IR in August)", sinceWeek: 1, seasonEnding: true },
   { id: "hurts", list: "IR", injury: "Blood clots (calf DVT, lungs)", sinceWeek: 6, seasonEnding: true },
   { id: "reed-jayden", list: "IR", injury: "Neck (surgery)", sinceWeek: 3, seasonEnding: true },
   { id: "sl-12641", list: "IR", injury: "Ankle (fracture, dislocation)", sinceWeek: 5, seasonEnding: true },
@@ -731,6 +731,7 @@ const INJURED_RESERVE = [
   { id: "sl-12455", list: "IR", injury: "Hamstring", sinceWeek: 7 },
   { id: "sl-12521", list: "IR", injury: "Shoulder (surgery)", sinceWeek: 7 },
   { id: "love-j", list: "IR", injury: "Right ankle (new injury)", sinceWeek: 9 },
+  { id: "sl-11592", list: "IR", injury: "Torn ACL, right knee (third time)", sinceWeek: 8, seasonEnding: true },
 ];
 const IR_MIN_GAMES = 4;
 const INJURED_BY_ID = Object.fromEntries(INJURED_RESERVE.map((r) => [r.id, r]));
@@ -1635,10 +1636,143 @@ function WeeklyScores({ players, data }) {
 }
 
 /* ---------------- injured reserve page ---------------- */
+// Return watch: IR/PUP stints whose earliest return is this week or next,
+// plus anyone on an IR stint Sleeper now lists as Questionable or Doubtful
+// (back at practice, so likely designated to return). Season-ending stints
+// are left out. sleeperOf(player) -> Sleeper's entry or undefined.
+const RETURN_WATCH_WEEKS = 2;
+const PRACTICING_STATUSES = ["Questionable", "Doubtful"];
+function returnWatch(injured, byId, week, sleeperOf) {
+  const rows = [];
+  for (const r of injured) {
+    const player = byId[r.id];
+    if (!player || r.seasonEnding) continue;
+    const back = irReturnWeek(r, player.team);
+    const practicing = PRACTICING_STATUSES.includes(sleeperOf(player)?.status);
+    if (practicing || (back != null && back >= week && back < week + RETURN_WATCH_WEEKS)) rows.push({ ...r, player, back, practicing });
+  }
+  return rows.sort((a, b) => b.practicing - a.practicing || (a.back ?? 99) - (b.back ?? 99) || a.player.name.localeCompare(b.player.name));
+}
+
+// Your own players first, keeping the order within each group.
+const mineFirst = (rows, isMine) => [...rows.filter(isMine), ...rows.filter((r) => !isMine(r))];
+
+// "Changed since you last looked": Sleeper status changes for the whole
+// report pool, spotted by comparing with the statuses saved on this browser's
+// last visit (the same diffStatuses the roster alerts use). The time shown is
+// when this page first saw the change.
+const INJURY_SEEN_KEY = "ff-valuediff:injury-seen-v1";
+const INJURY_FEED_KEEP = 40;
+const INJURY_FEED_DAYS = 3;
+function useInjuryChanges(sids, sleeperPlayers) {
+  const read = () => {
+    try { return { statuses: {}, feed: [], ...JSON.parse(localStorage.getItem(INJURY_SEEN_KEY) || "null") }; }
+    catch (e) { return { statuses: {}, feed: [] }; }
+  };
+  const [feed, setFeed] = useState(() => read().feed);
+  const key = sids.join(",");
+  useEffect(() => {
+    if (sids.length === 0 || Object.keys(sleeperPlayers).length === 0) return;
+    const saved = read();
+    const { changes, next } = diffStatuses("nfl", sids, sleeperPlayers, saved.statuses);
+    const cutoff = Date.now() - INJURY_FEED_DAYS * 86400000;
+    const out = {
+      // Merged, not replaced: the pool grows once the scores' extra players
+      // load, and their saved statuses must survive the earlier, smaller pass.
+      statuses: { ...saved.statuses, ...next },
+      feed: [...changes.map((c) => ({ ...c, at: Date.now() })), ...saved.feed].filter((c) => c.at > cutoff).slice(0, INJURY_FEED_KEEP),
+    };
+    try { localStorage.setItem(INJURY_SEEN_KEY, JSON.stringify(out)); } catch (e) {}
+    setFeed(out.feed);
+  }, [key, sleeperPlayers]);
+  return feed;
+}
+
+const INJURIES_MINE_KEY = "ff-valuediff:injuries-mine";
+const MINE_OPTIONS = [{ key: "all", label: "All players" }, { key: "mine", label: "My team" }];
+
+function InjuryChanges({ feed, isMineSid, keepSid }) {
+  const [open, setOpen] = useState(false);
+  const rows = mineFirst(feed.filter((c) => keepSid(c.id)), (c) => isMineSid(c.id));
+  if (rows.length === 0) return null;
+  const shown = open ? rows : rows.slice(0, 8);
+  const color = (s) => REPORT_STATUS_COLOR[s] || (LONG_TERM_STATUS[s] ? "var(--series-red)" : "var(--hue-aqua)");
+  return (
+    <section className="rounded-lg border px-3 py-2.5 flex flex-col gap-1.5" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+        Changed since you last looked <span style={{ fontWeight: 400 }}>({rows.length})</span>
+      </h3>
+      <ul className="flex flex-col gap-1 text-sm">
+        {shown.map((c) => (
+          <li key={`${c.key}-${c.at}`} className="flex flex-wrap items-baseline gap-x-1.5">
+            <PlayerLink id={c.id} className={isMineSid(c.id) ? "font-semibold" : "font-medium"}>{c.name}</PlayerLink>
+            <span style={{ color: "var(--text-muted)" }}>{alertStatusLabel(c.from)} →</span>
+            <span className="font-semibold" style={{ color: color(c.to) }}>{alertStatusLabel(c.to)}</span>
+            {c.injury && c.to && <span style={{ color: "var(--text-secondary)" }}>· {c.injury}</span>}
+            <span className="text-xs" title="When this page first saw the change" style={{ color: "var(--text-muted)" }}>· {ago(c.at)}</span>
+          </li>
+        ))}
+      </ul>
+      {rows.length > shown.length || open ? (
+        <button type="button" className="self-start text-xs underline" style={{ color: "var(--text-muted)" }} onClick={() => setOpen(!open)}>
+          {open ? "Show fewer" : `Show all ${rows.length}`}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function ReturnWatch({ rows, tag, isMine, ownerOf, connected, emptyText }) {
+  const note = (r) => {
+    if (isMine(r.player)) return r.practicing ? "Yours: back at practice, get his IR spot ready" : "Yours: activate from IR when cleared";
+    if (connected && !ownerOf(r.player)) return "Available: stash candidate";
+    return r.practicing ? "Back at practice" : "";
+  };
+  const headers = ["Player", "Pos", "Team", "Status", "Injury", "Eligible", "Note"];
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border p-6 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>{emptyText}</div>
+    );
+  }
+  return (
+    <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            {headers.map((h) => (
+              <th key={h} className={`${h === "Eligible" ? "text-right" : "text-left"} px-3 py-2 text-xs font-semibold`} style={{ color: "var(--text-muted)" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+              <td className="px-3 py-2 whitespace-nowrap"><PlayerLink id={r.player.id} name={r.player.name} pos={r.player.position}>{r.player.name}</PlayerLink>{tag(r.player)}</td>
+              <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{r.player.position}</td>
+              <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{r.player.team}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                <span className="rounded-full px-2 py-0.5 text-xs font-semibold border"
+                  style={{ borderColor: "var(--border)", color: r.practicing ? "var(--hue-aqua)" : "var(--series-amber)" }}>
+                  {r.practicing ? "Practicing" : r.list}
+                </span>
+              </td>
+              <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{r.injury}</td>
+              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold" style={{ color: "var(--text-primary)" }}>
+                {r.back != null ? `Wk ${r.back}` : "–"}
+              </td>
+              <td className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>{note(r)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Everyone in INJURED_RESERVE, in two tables: IR/PUP stints ordered by the
 // earliest week each player can return (soonest first), then season-ending
 // injuries in their own section below.
-function InjuryTable({ rows, showReturn }) {
+function InjuryTable({ rows, showReturn, tag = () => null }) {
   const headers = ["Player", "Pos", "Team", "Status", "Injury", "Since", ...(showReturn ? ["Earliest return"] : [])];
   return (
     <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
@@ -1654,7 +1788,7 @@ function InjuryTable({ rows, showReturn }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b" style={{ borderColor: "var(--border)" }}>
-              <td className="px-3 py-2 whitespace-nowrap"><PlayerLink id={r.player.id} name={r.player.name} pos={r.player.position}>{r.player.name}</PlayerLink></td>
+              <td className="px-3 py-2 whitespace-nowrap"><PlayerLink id={r.player.id} name={r.player.name} pos={r.player.position}>{r.player.name}</PlayerLink>{tag(r.player)}</td>
               <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{r.player.position}</td>
               <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{r.player.team}</td>
               <td className="px-3 py-2 whitespace-nowrap">
@@ -1699,15 +1833,18 @@ const REPORT_STATUS_COLOR = {
   NA: "var(--text-muted)",
 };
 
-function InjuryReport({ players, positionFilter, data, sectionTitle }) {
-  const [state, setState] = useState({ status: "loading", rows: [] });
+// The live report's players: the pool plus the waiver targets not already in it.
+function injuryReportPool(players) {
+  const { normalizeName } = window.SleeperScores;
+  const key = (p) => `${normalizeName(p.name)}|${p.position}`;
+  const known = new Set(players.map(key));
+  return [...players, ...WAIVER_TARGETS.filter((t) => !known.has(key(t)))];
+}
 
-  const pool = useMemo(() => {
-    const { normalizeName } = window.SleeperScores;
-    const key = (p) => `${normalizeName(p.name)}|${p.position}`;
-    const known = new Set(players.map(key));
-    return [...players, ...WAIVER_TARGETS.filter((t) => !known.has(key(t)))];
-  }, [players]);
+// keep(player): the page's position / my-team filter. isMine(player) sorts
+// your players first; tag(player) is shown after the name.
+function InjuryReport({ pool, keep, isMine, tag, emptyText, data, sectionTitle }) {
+  const [state, setState] = useState({ status: "loading", rows: [] });
 
   useEffect(() => {
     let cancelled = false;
@@ -1728,11 +1865,11 @@ function InjuryReport({ players, positionFilter, data, sectionTitle }) {
   }, [pool]);
 
   const lastWeek = playedWeeks(data.scores).slice(-1)[0];
-  const rows = state.rows
-    .filter((r) => positionFilter === "ALL" || r.player.position === positionFilter)
+  const rows = mineFirst(state.rows
+    .filter((r) => keep(r.player))
     .sort((a, b) =>
       REPORT_STATUSES.indexOf(a.sleeper.status) - REPORT_STATUSES.indexOf(b.sleeper.status) ||
-      a.player.name.localeCompare(b.player.name));
+      a.player.name.localeCompare(b.player.name)), (r) => isMine(r.player));
 
   // How the player's most recent week went: points, OUT, or blank if their
   // game hasn't been played yet.
@@ -1762,7 +1899,7 @@ function InjuryReport({ players, positionFilter, data, sectionTitle }) {
       )}
       {state.status === "loading" ? message("Loading the latest designations from Sleeper…")
         : state.status === "error" ? message(`Couldn't reach Sleeper (${state.message}). The live injury report needs the page served over http(s).`)
-        : rows.length === 0 ? message("No one at this position is questionable, doubtful or out right now.")
+        : rows.length === 0 ? message(emptyText)
         : (
           <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
             <table className="w-full border-collapse text-sm">
@@ -1777,7 +1914,7 @@ function InjuryReport({ players, positionFilter, data, sectionTitle }) {
               <tbody>
                 {rows.map(({ player, sleeper }) => (
                   <tr key={player.id} className="border-b" style={{ borderColor: "var(--border)" }}>
-                    <td className="px-3 py-2"><PlayerLink id={player.id} name={player.name} pos={player.position}>{player.name}</PlayerLink></td>
+                    <td className="px-3 py-2"><PlayerLink id={player.id} name={player.name} pos={player.position}>{player.name}</PlayerLink>{tag(player)}</td>
                     <td className="px-3 py-2"><PosBadge pos={player.position} /></td>
                     <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{player.team}</td>
                     <td className="px-3 py-2 font-semibold" style={{ color: REPORT_STATUS_COLOR[sleeper.status] }}>
@@ -1801,27 +1938,61 @@ function InjuryReport({ players, positionFilter, data, sectionTitle }) {
   );
 }
 
-function InjuredReserve({ players, reportPlayers, data }) {
+function InjuredReserve({ players, reportPlayers, data, sleeperPlayers = {} }) {
   const [positionFilter, setPositionFilter] = useState("ALL");
+  const resolve = React.useContext(NflIdContext);
+  const myLeague = React.useContext(MyLeagueContext).nfl;
+  const { ownerOf, connected } = useRostered("nfl");
+  const mine = myLeague?.mine;
+  const hasMine = !!mine && mine.size > 0;
+  const [mineView, setMineView] = useState(() => { try { return localStorage.getItem(INJURIES_MINE_KEY) || "all"; } catch (e) { return "all"; } });
+  const pickMineView = (v) => { setMineView(v); try { localStorage.setItem(INJURIES_MINE_KEY, v); } catch (e) {} };
+  const mineOnly = hasMine && mineView === "mine";
+
+  const sidOf = (p) => resolve(p.id, p.name, p.position);
+  const isMine = (p) => hasMine && mine.has(String(sidOf(p)));
+  const keep = (p) => (positionFilter === "ALL" || p.position === positionFilter) && (!mineOnly || isMine(p));
+  const ownerOfPlayer = (p) => ownerOf(sidOf(p));
+  const tag = (p) => (isMine(p) ? null : <RosteredTag owner={ownerOfPlayer(p)} />);
+  const empty = (what) => (mineOnly ? `None of your players ${what}.` : `No players at this position ${what}.`);
+
   // Entries can be extra players (sl- ids) too, once the scores have loaded.
   const byId = useMemo(() => Object.fromEntries([...reportPlayers, ...players].map((p) => [p.id, p])), [players, reportPlayers]);
+  const pool = useMemo(() => injuryReportPool(reportPlayers), [reportPlayers]);
 
-  const { onIr, seasonEnding } = useMemo(() => {
+  // Status changes across the report pool, by Sleeper id.
+  const sidToPlayer = useMemo(() => {
+    if (Object.keys(sleeperPlayers).length === 0) return {};
+    const matched = window.SleeperScores.matchSleeperIds(pool, sleeperPlayers);
+    return Object.fromEntries(pool.filter((p) => matched[p.id]).map((p) => [String(matched[p.id]), p]));
+  }, [pool, sleeperPlayers]);
+  const feed = useInjuryChanges(Object.keys(sidToPlayer).sort(), sleeperPlayers);
+
+  const week = waiverWeek(data);
+  const { onIr, seasonEnding, watch } = useMemo(() => {
     const rows = data.injured
       .map((entry) => ({ ...entry, player: byId[entry.id] }))
-      .filter((r) => r.player && (positionFilter === "ALL" || r.player.position === positionFilter))
+      .filter((r) => r.player && keep(r.player))
       .map((r) => ({ ...r, back: irReturnWeek(r, r.player.team) }));
     const byName = (a, b) => a.player.name.localeCompare(b.player.name);
+    const mineRow = (r) => isMine(r.player);
+    const watchRows = week
+      ? returnWatch(data.injured.filter((e) => byId[e.id] && keep(byId[e.id])), byId, week, (p) => sleeperPlayers[sidOf(p)])
+      : [];
     return {
-      onIr: rows.filter((r) => !r.seasonEnding).sort((a, b) => a.back - b.back || byName(a, b)),
-      seasonEnding: rows.filter((r) => r.seasonEnding).sort(byName),
+      onIr: mineFirst(rows.filter((r) => !r.seasonEnding).sort((a, b) => a.back - b.back || byName(a, b)), mineRow),
+      seasonEnding: mineFirst(rows.filter((r) => r.seasonEnding).sort(byName), mineRow),
+      watch: mineFirst(watchRows, mineRow),
     };
-  }, [byId, positionFilter, data.injured]);
+  }, [byId, positionFilter, mineOnly, mine, data.injured, week, sleeperPlayers, resolve]);
 
   const sectionTitle = (text, count) => (
     <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
       {text} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>({count})</span>
     </h3>
+  );
+  const emptyBox = (text) => (
+    <div className="rounded-lg border p-6 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>{text}</div>
   );
 
   return (
@@ -1829,8 +2000,9 @@ function InjuredReserve({ players, reportPlayers, data }) {
       <header>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Injuries</h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          This week&apos;s injury report (questionable, doubtful and out), then players on injured reserve or PUP (at
-          least four games out), sorted by the earliest week they can return, and players out for the season.
+          This week&apos;s injury report (questionable, doubtful and out), who&apos;s close to coming back, then players on
+          injured reserve or PUP (at least four games out), sorted by the earliest week they can return, and players out
+          for the season.
         </p>
         <AboutData>
           The weekly injury report is live from Sleeper. The IR lists are hand-kept (as of {INJURED_RESERVE_UPDATED_ON}, from
@@ -1838,37 +2010,51 @@ function InjuredReserve({ players, reportPlayers, data }) {
           added (marked <em>from Sleeper</em>, starting the week after his last game), and anyone it shows as active again is
           taken off. "Earliest return" is the
           first week the player is eligible to come back, counting four team games from the start of the stint and
-          skipping byes; many players take longer. Edit <code>INJURED_RESERVE</code> in <code>index.html</code> as
-          players are placed on or activated from IR.
+          skipping byes; many players take longer. Return watch lists stints that open this week or next, plus IR players
+          Sleeper now lists as questionable or doubtful (back at practice). "Changed since you last looked" compares
+          Sleeper&apos;s statuses with the ones this browser saw on your last visit. With a Sleeper league connected, your
+          players (★) come first in every list and other teams&apos; players are marked <em>Rostered</em>. Edit{" "}
+          <code>INJURED_RESERVE</code> in <code>index.html</code> as players are placed on or activated from IR
+          (<code>node scripts/check-injuries.js</code> lists the entries worth a look).
         </AboutData>
       </header>
 
-      <div>
-        <PillGroup options={POSITION_OPTIONS} value={positionFilter} onChange={setPositionFilter} />
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <PillGroup options={POSITION_OPTIONS} value={positionFilter} onChange={setPositionFilter} />
+          {hasMine && <PillGroup options={MINE_OPTIONS} value={mineOnly ? "mine" : "all"} onChange={pickMineView} />}
+        </div>
+        {!connected && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Connect your Sleeper league on the <a href="#/waivers" className="underline">Waiver Wire</a> to see your players first.
+          </p>
+        )}
       </div>
 
-      <InjuryReport players={reportPlayers} positionFilter={positionFilter} data={data} sectionTitle={sectionTitle} />
+      <InjuryChanges feed={feed} isMineSid={(sid) => hasMine && mine.has(String(sid))}
+        keepSid={(sid) => !!sidToPlayer[sid] && keep(sidToPlayer[sid])} />
+
+      <InjuryReport pool={pool} keep={keep} isMine={isMine} tag={tag} data={data} sectionTitle={sectionTitle}
+        emptyText={empty("are questionable, doubtful or out right now")} />
+
+      {week && (
+        <section className="flex flex-col gap-2">
+          {sectionTitle("Return watch", watch.length)}
+          <ReturnWatch rows={watch} tag={tag} isMine={isMine} ownerOf={ownerOfPlayer} connected={connected}
+            emptyText={empty(`can come off IR in Week ${week} or ${week + 1}`)} />
+        </section>
+      )}
 
       <section className="flex flex-col gap-2">
         {sectionTitle("On IR / PUP", onIr.length)}
-        {onIr.length === 0 ? (
-          <div className="rounded-lg border p-6 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-            No players at this position are on IR right now.
-          </div>
-        ) : (
-          <InjuryTable rows={onIr} showReturn />
-        )}
+        {onIr.length === 0 ? emptyBox(empty("are on IR right now")) : <InjuryTable rows={onIr} showReturn tag={tag} />}
       </section>
 
       <section className="flex flex-col gap-2">
         {sectionTitle("Out for the Season", seasonEnding.length)}
-        {seasonEnding.length === 0 ? (
-          <div className="rounded-lg border p-6 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-            No season-ending injuries at this position.
-          </div>
-        ) : (
-          <InjuryTable rows={seasonEnding} showReturn={false} />
-        )}
+        {seasonEnding.length === 0
+          ? emptyBox(mineOnly ? "None of your players are out for the season." : "No season-ending injuries at this position.")
+          : <InjuryTable rows={seasonEnding} showReturn={false} tag={tag} />}
       </section>
     </div>
   );
@@ -9418,7 +9604,7 @@ function App() {
         {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} sport={sport} setSport={setSport} />}
         {page === "weekly" && <WeeklyScores players={liveScores.players} data={liveScores} />}
         {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} values={dynasty.rows} />}
-        {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} />}
+        {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} sleeperPlayers={sleeperPlayers} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
         {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}
         {page === "targets" && (

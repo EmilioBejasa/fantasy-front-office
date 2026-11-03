@@ -342,3 +342,63 @@ test("sinceLastVisit: value, rank and record changes", () => {
   assert.deepEqual(plain(app.sinceLastVisit(prev, prev)), []);
   assert.deepEqual(plain(app.sinceLastVisit(null, now)), []);
 });
+
+test("returnWatch: stints that open this week or next, plus IR players back at practice", () => {
+  const byes = app.BYE_WEEKS;
+  const team = Object.keys(byes).find((t) => byes[t] === 7);
+  const byId = Object.fromEntries(["a", "b", "c", "d", "e"].map((id) => [id, { id, name: id.toUpperCase(), team, position: "WR" }]));
+  const injured = [
+    { id: "a", list: "IR", injury: "Knee", sinceWeek: 5 }, // games 5, 6, 8, 9 (bye 7): back Week 10
+    { id: "b", list: "IR", injury: "Ankle", sinceWeek: 6 }, // 6, 8, 9, 10: back Week 11
+    { id: "c", list: "IR", injury: "Hamstring", sinceWeek: 8 }, // back Week 12: too far off
+    { id: "d", list: "IR", injury: "Torn ACL", sinceWeek: 2, seasonEnding: true },
+    { id: "e", list: "IR", injury: "Foot", sinceWeek: 8 }, // too far off, but practicing again
+  ];
+  const statuses = { e: "Questionable", d: "Questionable" };
+  const rows = app.returnWatch(injured, byId, 10, (p) => ({ status: statuses[p.id] || "IR" }));
+  assert.deepEqual(plain(rows.map((r) => [r.id, r.back, r.practicing])), [["e", 12, true], ["a", 10, false], ["b", 11, false]]);
+});
+
+test("mineFirst: your players first, order kept within each group", () => {
+  const rows = ["a", "b", "c", "d"];
+  assert.deepEqual(plain(app.mineFirst(rows, (r) => r === "c" || r === "a")), ["a", "c", "b", "d"]);
+});
+
+test("checkInjuries: flags entries Sleeper or the scores disagree with", () => {
+  const { checkInjuries, upcomingWeek } = require("../scripts/check-injuries");
+  const pool = [
+    { id: "healed", name: "Healed", team: "DET", position: "WR" },
+    { id: "played", name: "Played", team: "DET", position: "RB" },
+    { id: "late", name: "Late", team: "DET", position: "TE" },
+    { id: "fine", name: "Fine", team: "DET", position: "WR" },
+    { id: "missing", name: "Missing", team: "DET", position: "RB" },
+  ];
+  const list = [
+    { id: "healed", list: "IR", injury: "Ankle sprain", sinceWeek: 7 },
+    { id: "played", list: "IR", injury: "Knee", sinceWeek: 3 },
+    { id: "late", list: "IR", injury: "Foot (fracture)", sinceWeek: 1 },
+    { id: "fine", list: "IR", injury: "Torn ACL", sinceWeek: 2, seasonEnding: true },
+    { id: "ghost", list: "IR", injury: "Hip", sinceWeek: 4 },
+  ];
+  const sleeper = {
+    1: { status: null }, 2: { status: "IR" }, 3: { status: "IR" }, 4: { status: "IR" }, 5: { status: "IR", injury: "Wrist" },
+  };
+  const sid = { healed: "1", played: "2", late: "3", fine: "4", missing: "5" };
+  const result = checkInjuries({
+    list, pool, sleeper, scores: { 4: { played: 12.3 } }, week: 9,
+    resolve: (id) => sid[id], returnWeek: (r) => (r.seasonEnding ? null : r.sinceWeek + 4),
+  });
+  const ids = (k) => plain(result[k].map((r) => r.id));
+  assert.deepEqual(ids("activeAgain"), ["healed"]);
+  assert.deepEqual(ids("scoredSince"), ["played"]);
+  assert.deepEqual(ids("pastReturn"), ["late"]);
+  assert.deepEqual(ids("notListed"), ["missing"]);
+  assert.deepEqual(ids("vague"), ["played"]);
+  assert.deepEqual(ids("unknown"), ["ghost"]);
+
+  // The upcoming week moves on once most teams have played the latest one.
+  const teams = Array.from({ length: 28 }, (_, i) => ({ id: `p${i}`, team: `T${i}` }));
+  const week = (n) => Object.fromEntries(teams.slice(0, n).map((p) => [p.id, 1]));
+  assert.equal(upcomingWeek({ 8: week(28) }, teams), 9);
+  assert.equal(upcomingWeek({ 8: week(28), 9: week(4) }, teams), 9);
+});

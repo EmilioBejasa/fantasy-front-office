@@ -855,10 +855,10 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   a player has fewer than 3 earlier games, it compares against last season
   instead, so the two numbers are never the same games. The **Your league**
   bar works as on football.
-- **Training Room** (`NbaInjuries`): everyone with a current Sleeper
-  designation. The order is Out and IR, then suspended, doubtful,
-  questionable, game-time decision (GTD) and day-to-day (DTD). You can
-  filter to fantasy-relevant players (15+ points per game) or everyone.
+- **Training Room** (`NbaInjuries`): fantasy-relevant players (15+ points per
+  game) with a current Sleeper designation. The order is Out and IR, then
+  suspended, doubtful, questionable, game-time decision (GTD) and day-to-day
+  (DTD).
 - **Boardroom** (`NbaLeagues`, `#/nba/leagues`): your connected Sleeper
   basketball league (the Waiver Desk's "Your league"), or any league at
   `#/nba/leagues/<id>` (**Make this my league** saves it). Players are valued

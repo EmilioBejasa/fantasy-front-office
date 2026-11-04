@@ -7575,7 +7575,6 @@ function NbaReturnCell({ est }) {
 
 function NbaInjuries({ data, settings }) {
   const [pos, setPos] = useState("ALL");
-  const [scope, setScope] = useState("relevant");
   const returns = useNbaReturns();
   const season = data.activeSeason;
   const byId = useMemo(() => Object.fromEntries((data.seasons[season] || []).map((p) => [p.id, p])), [data, season]);
@@ -7589,15 +7588,15 @@ function NbaInjuries({ data, settings }) {
   const rows = useMemo(() => Object.entries(data.players)
     .filter(([, p]) => NBA_STATUSES.includes(p.status) && nbaPosMatch(p, pos))
     .map(([id, p]) => ({ id, ...p, season: byId[id], fpg: fpgById[id] ?? null }))
-    .filter((r) => scope === "all" || r.fpg >= 15)
+    .filter((r) => r.fpg >= 15)
     .sort((a, b) => NBA_STATUSES.indexOf(a.status) - NBA_STATUSES.indexOf(b.status) || (b.fpg ?? 0) - (a.fpg ?? 0)),
-  [data.players, byId, fpgById, pos, scope]);
+  [data.players, byId, fpgById, pos]);
 
   return (
     <div className="flex flex-col gap-5">
-      <NbaPageHeader title="Injury Report" lead="Every NBA player with an injury designation right now, most serious first.">
+      <NbaPageHeader title="Injury Report" lead="Fantasy-relevant NBA players with an injury designation right now, most serious first.">
         Live from Sleeper's NBA player data (refreshed hourly). Out and IR are the most serious, then suspended,
-        doubtful and questionable; GTD is a game-time decision and DTD day-to-day. "Fantasy-relevant" means 15+ fantasy
+        doubtful and questionable; GTD is a game-time decision and DTD day-to-day. Fantasy-relevant means 15+ fantasy
         points per game ({settings.scoring === "espn" ? "ESPN" : "Standard"} scoring), the same blend the Trade Desk uses:
         this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. GP is games played
         in {nbaSeasonLabel(season)}. Expected back comes from ESPN's injury feed. The dates are ESPN's estimates, not team
@@ -7606,9 +7605,6 @@ function NbaInjuries({ data, settings }) {
       </NbaPageHeader>
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-        <LabeledControl label="Show">
-          <PillGroup options={[{ key: "relevant", label: "Fantasy-relevant" }, { key: "all", label: "Everyone" }]} value={scope} onChange={setScope} />
-        </LabeledControl>
         <LabeledControl label="Position">
           <PillGroup options={NBA_POSITION_OPTIONS} value={pos} onChange={setPos} />
         </LabeledControl>

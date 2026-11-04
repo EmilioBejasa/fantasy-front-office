@@ -896,6 +896,15 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   - availability is games played ÷ team games, kept between 50% and 100%
   - rookies have no value until they've played
 
+### Expected back (Training Room)
+
+The Injury Report's **Expected back** column comes from ESPN's public injury feed (`NBA_INJURIES_URL`, fetched in the
+browser, matched to Sleeper by name with accents and suffixes removed), since Sleeper has no dates. ESPN's `returnDate`
+is an estimate and often a placeholder, so `nbaReturnEstimate` lets the report overrule it: ESPN's out-for-season flag
+shows "Out for season", "no timetable" wording shows "No timetable", and a timeline stated in the short comment that runs
+well past the date replaces it. Otherwise the date shows with a countdown and any stated timeline beneath. If ESPN can't
+be reached, or a player isn't in its feed, the column shows a dash. The feed is unofficial, so it could change.
+
 ## Player profiles
 
 Every player has a profile page, football at `#/player/<Sleeper id>` and

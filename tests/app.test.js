@@ -490,3 +490,53 @@ test("playoffOutlook: rates a schedule by the defenses a position faces", () => 
   assert.equal(app.playoffOutlook("DAL", "WR", [15], {}, ranks), null);
   assert.equal(app.playoffOutlook(null, "WR", [15], schedule, ranks), null);
 });
+
+test("nbaReturnEstimate: the report's words beat ESPN's date", () => {
+  const entry = (date, shortComment, extra = {}) => ({
+    date: "2026-11-03T22:00Z", shortComment, longComment: "",
+    details: { returnDate: date, fantasyStatus: { abbreviation: "OUT" }, ...extra },
+  });
+  const today = "2026-11-04";
+  const est = app.nbaReturnEstimate(entry("2026-11-06", "Landale is out with a left hip strain."), today);
+  assert.equal(est.kind, "date");
+  assert.equal(est.days, 2);
+  assert.equal(app.nbaReturnEstimate(entry("2027-07-01", "Torn ACL.", { fantasyStatus: { abbreviation: "OFS" } }), today).kind, "season");
+  assert.equal(app.nbaReturnEstimate(entry("2026-11-08", "Carter is without a timetable for a return."), today).kind, "none");
+  // A stated timeline well past the date replaces it...
+  const gueye = app.nbaReturnEstimate(entry("2026-11-20", "Gueye will be re-evaluated by medical staff in 3-to-4 months."), today);
+  assert.equal(gueye.kind, "stated");
+  assert.equal(app.nbaReturnLabel(gueye), "Re-evaluation in 3-to-4 months");
+  // ...and one that agrees with it stays beside the date.
+  const duren = app.nbaReturnEstimate(entry("2026-11-17", "Duren will be re-evaluated in two weeks."), today);
+  assert.equal(duren.kind, "date");
+  assert.equal(duren.stated.label, "Re-evaluation in two weeks");
+  assert.equal(app.nbaReturnEstimate({ details: {} }, today), null);
+  // A teammate's timeline in the long comment isn't this player's.
+  const teammate = entry("2027-01-02", "Sheppard will miss months after knee surgery.");
+  teammate.longComment = "With Tyrese Haliburton (hamstring) expected to miss at least two weeks, Jackson should play more.";
+  assert.equal(app.nbaReturnEstimate(teammate, today).stated, null);
+  const noDate = entry("2027-01-02", "Sheppard had surgery.");
+  noDate.longComment = "Sheppard is without a definitive timetable for a return.";
+  assert.equal(app.nbaReturnEstimate(noDate, today).kind, "none");
+});
+
+test("statedTimeline: ranges and words, not other numbers", () => {
+  assert.equal(app.statedTimeline("will miss at least 8-10 weeks").label, "Expected out 8-10 weeks");
+  assert.equal(app.statedTimeline("will miss at least 8-10 weeks").days, 56);
+  assert.equal(app.statedTimeline("is expected to miss six months").days, 180);
+  assert.equal(app.statedTimeline("re-evaluated in one week").label, "Re-evaluation in one week");
+  assert.equal(app.statedTimeline("will miss his third straight game"), null);
+  assert.equal(app.statedTimeline("averaged 12 points over two weeks"), null);
+  assert.equal(app.statedTimeline(""), null);
+});
+
+test("nbaReturnLabel and name keys", () => {
+  assert.equal(app.nbaReturnLabel(null), "–");
+  assert.equal(app.nbaReturnLabel({ kind: "season" }), "Out for season");
+  assert.equal(app.nbaReturnLabel({ kind: "date", date: "2026-11-01", days: -3 }), "Estimate passed");
+  assert.match(app.nbaReturnLabel({ kind: "date", date: "2026-11-20", days: 16 }), /· 2 weeks$/);
+  assert.match(app.nbaReturnLabel({ kind: "date", date: "2026-11-04", days: 0 }), /· today$/);
+  assert.equal(app.nbaNameKey("Kristaps Porziņģis"), app.nbaNameKey("Kristaps Porzingis"));
+  assert.equal(app.nbaNameKey("Jimmy Butler III"), app.nbaNameKey("Jimmy Butler"));
+  assert.equal(app.nbaNameKey("Yanic Konan Niederhäuser"), app.nbaNameKey("Yanic Konan Niederhauser"));
+});

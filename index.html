@@ -7467,9 +7467,116 @@ function NbaWaivers({ data, settings }) {
 
 /* ---------- Training Room (injuries) ---------- */
 
+// When an injured player is expected back, from ESPN's public injury feed
+// (Sleeper has no dates). ESPN gives everyone a returnDate, but many are
+// placeholders, so the report's own words win: "no timetable" means no date, and
+// a stated timeline well past the date replaces it.
+const NBA_INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries";
+const NO_TIMETABLE = /\b(?:no|without a)(?: definitive| clear| firm)? (?:timetable|timeline)\b|\bindefinite|\bunclear (?:when|how long)\b/i;
+const DURATION_NUMBERS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12 };
+const DURATION_NUM = `(?:\\d+|${Object.keys(DURATION_NUMBERS).join("|")})`;
+const STATED_TIMELINE = new RegExp(
+  `\\b(re-?evaluated|miss|sidelined|out)\\b[^.]{0,40}?\\b(${DURATION_NUM})((?:-| )?(?:to|-)(?:-| )?${DURATION_NUM})?[- ](day|week|month)s?\\b`, "i");
+const UNIT_DAYS = { day: 1, week: 7, month: 30 };
+// A date this far before a stated timeline's start is the placeholder, not the timeline.
+const RETURN_CONFLICT_DAYS = 14;
+
+// The timeline a report states, as { label, days } with days its low end, or null.
+function statedTimeline(text) {
+  const m = STATED_TIMELINE.exec(text || "");
+  if (!m) return null;
+  const low = DURATION_NUMBERS[m[2].toLowerCase()] ?? Number(m[2]);
+  const unit = m[4].toLowerCase();
+  const range = `${m[2]}${m[3] || ""} ${unit}s`.replace(/^(one|1) (day|week|month)s$/i, "$1 $2");
+  return { label: /^re/i.test(m[1]) ? `Re-evaluation in ${range}` : `Expected out ${range}`, days: low * UNIT_DAYS[unit] };
+}
+
+const dayNumber = (iso) => { const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
+
+// What to show for one feed entry: { kind, date, days, stated }. kind is
+// "season" (out for the year), "none" (no timetable), "stated" (only the report's
+// timeline) or "date" (ESPN's estimate, days from today).
+function nbaReturnEstimate(entry, today) {
+  const details = entry.details || {};
+  const text = `${entry.shortComment || ""} ${entry.longComment || ""}`;
+  if (details.fantasyStatus?.abbreviation === "OFS") return { kind: "season" };
+  // Only the short comment: the long one also covers teammates' timelines.
+  const stated = statedTimeline(entry.shortComment);
+  if (NO_TIMETABLE.test(text)) return { kind: "none", stated };
+  const date = details.returnDate;
+  if (!date) return stated ? { kind: "stated", stated } : null;
+  const reported = entry.date ? dayNumber(entry.date) : dayNumber(today);
+  if (stated && dayNumber(date) < reported + stated.days - RETURN_CONFLICT_DAYS) return { kind: "stated", stated };
+  return { kind: "date", date, days: dayNumber(date) - dayNumber(today), stated };
+}
+
+// Names differ by accents between the feeds (Porziņģis, Porzingis) and suffixes.
+const nbaNameKey = (name) => String(name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "").replace(/[^a-z]/g, "");
+
+// The feed's response as { nameKey: estimate }.
+function nbaReturnsByName(feed, today) {
+  const out = {};
+  for (const team of feed?.injuries || []) {
+    for (const entry of team.injuries || []) {
+      const estimate = nbaReturnEstimate(entry, today);
+      if (entry.athlete?.displayName && estimate) out[nbaNameKey(entry.athlete.displayName)] = estimate;
+    }
+  }
+  return out;
+}
+
+// { nameKey: estimate }, empty until it loads or if ESPN can't be reached.
+function useNbaReturns() {
+  const [returns, setReturns] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch(NBA_INJURIES_URL).then((res) => (res.ok ? res.json() : null))
+      .then((feed) => { if (!cancelled && feed) setReturns(nbaReturnsByName(feed, localIsoDate(new Date()))); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  return returns;
+}
+
+const localIsoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// "2 days", "3 weeks", "5 months".
+function returnCountdown(days) {
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day";
+  if (days < 14) return `${days} days`;
+  if (days < 60) return `${Math.round(days / 7)} weeks`;
+  return `${Math.round(days / 30)} months`;
+}
+
+// The main line of the "Expected back" column.
+function nbaReturnLabel(est) {
+  if (!est) return "–";
+  if (est.kind === "season") return "Out for season";
+  if (est.kind === "none") return "No timetable";
+  if (est.kind === "stated") return est.stated.label;
+  if (est.days < 0) return "Estimate passed";
+  const day = new Date(`${est.date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return est.days === 0 ? `${day} · today` : `${day} · ${returnCountdown(est.days)}`;
+}
+
+function NbaReturnCell({ est }) {
+  const season = est?.kind === "season";
+  const second = est && est.kind !== "stated" && est.stated ? est.stated.label : null;
+  return (
+    <td className="px-3 py-2 whitespace-nowrap">
+      <span className={`block text-xs ${season ? "font-semibold" : "tabular-nums"}`}
+        style={{ color: season ? "var(--series-red)" : est ? "var(--text-primary)" : "var(--text-muted)" }}>{nbaReturnLabel(est)}</span>
+      {second && <span className="block text-xs" style={{ color: "var(--text-muted)" }}>{second}</span>}
+    </td>
+  );
+}
+
 function NbaInjuries({ data, settings }) {
   const [pos, setPos] = useState("ALL");
   const [scope, setScope] = useState("relevant");
+  const returns = useNbaReturns();
   const season = data.activeSeason;
   const byId = useMemo(() => Object.fromEntries((data.seasons[season] || []).map((p) => [p.id, p])), [data, season]);
   // The Trade Desk's FPG, which blends in last season until a player has
@@ -7493,7 +7600,9 @@ function NbaInjuries({ data, settings }) {
         doubtful and questionable; GTD is a game-time decision and DTD day-to-day. "Fantasy-relevant" means 15+ fantasy
         points per game ({settings.scoring === "espn" ? "ESPN" : "Standard"} scoring), the same blend the Trade Desk uses:
         this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. GP is games played
-        in {nbaSeasonLabel(season)}.
+        in {nbaSeasonLabel(season)}. Expected back comes from ESPN's injury feed. The dates are ESPN's estimates, not team
+        announcements, and many are rough, so a report saying there's no timetable, or a stated timeline well past the
+        date, replaces the date. Stated timelines count from when they were reported, which may be a while ago.
       </NbaPageHeader>
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
@@ -7509,14 +7618,14 @@ function NbaInjuries({ data, settings }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["Player", "Pos", "Status", "Injury", "FPG", "GP"].map((h, i) => (
-                <th key={h} className={`px-3 py-2 text-xs font-semibold ${i >= 4 ? "text-right" : "text-left"}`} style={{ color: "var(--text-muted)" }}>{h}</th>
+              {["Player", "Pos", "Status", "Injury", "Expected back", "FPG", "GP"].map((h, i) => (
+                <th key={h} className={`px-3 py-2 text-xs font-semibold whitespace-nowrap ${i >= 5 ? "text-right" : "text-left"}`} style={{ color: "var(--text-muted)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody on the injury report here right now.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody on the injury report here right now.</td></tr>
             )}
             {rows.map((r) => (
               <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
@@ -7533,6 +7642,7 @@ function NbaInjuries({ data, settings }) {
                 <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>
                   {[r.injury, r.notes].filter(Boolean).join(" — ") || "–"}
                 </td>
+                <NbaReturnCell est={returns[nbaNameKey(r.name)]} />
                 <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{fmt1(r.fpg)}</td>
                 <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.season ? r.season.gp : r.fpg != null ? 0 : "–"}</td>
               </tr>

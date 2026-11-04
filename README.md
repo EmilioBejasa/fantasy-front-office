@@ -298,6 +298,18 @@ players (★) wherever a player name link appears, puts a "Your league" link on
 the home page, and can be set from a Boardroom league page (**Make this my
 league**).
 
+**FAAB bids** (`faabMarket`, `faabBid`, `useFaabMarket`, football only) sit under
+each target's priority. In a connected FAAB league (Sleeper's
+`settings.waiver_type` 2) they're dollars: each tier takes a range of the bids the
+league has won this season (Must Add the 75th-95th percentile, Speculative
+45th-70th, Streamer 15th-35th, Deep League up to the 15th), or a share of the budget
+until there are `FAAB_MIN_HISTORY` bids. Either is multiplied by a pace, the
+league's average money left against an even spend to the playoffs (0.75-1.5×), and
+capped at what you have left if a username was connected (with a league ID there's
+no "you"). A summary shows your money, the most on another team, the league average
+and the winning bids so far. With no league connected, bids are a share of the
+budget; in a league without FAAB, none show.
+
 **Live picks** (`LivePicks`, `buildLivePicks`) are worked out on every visit
 from the live weekly scores and Sleeper's designations, so the desk is never
 without a current list. They're for the waiver week (`waiverWeek`): the
@@ -572,6 +584,11 @@ and everything else uses team, matchup, standings, league pulse, building blocks
   its 30-day change and a sparkline of the players' combined KeepTradeCut value over the last 8 weekly points
   (`teamValueSeries`, data/market-history.js). **Since your last visit** (`useLastVisit`, this browser's
   `localStorage`, at least an hour apart) shows the change in value, roster rank and record since then.
+- **Playoff schedule** (`PlayoffSchedule`, `playoffOutlook`): the shown team's lineup against its opponents in the
+  league's playoff weeks (`playoffWeeks`, from `playoff_week_start`, `playoff_teams` and `playoff_round_type`). Each game
+  is colored by `defenseRanks` (the PPR points that defense has allowed to the position this season: the top 8 are good,
+  the bottom 8 tough), and an average rank in the top or bottom 12 makes the player's outlook Good or Tough. The dynasty
+  **Trade Targets** page shows the same line on each win-now buy, for Weeks 15-17, with a sort by it.
 - **Building blocks** (`BuildingBlocks`, dynasty): your players 24 and under, best first with their 30-day trend, and
   the picks you own in the next three drafts, by year.
 - **League pulse** (`LeaguePulse`): the league's completed trades, adds and drops over the last 3 weeks (Sleeper's

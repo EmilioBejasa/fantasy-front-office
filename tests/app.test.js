@@ -402,3 +402,91 @@ test("checkInjuries: flags entries Sleeper or the scores disagree with", () => {
   assert.equal(upcomingWeek({ 8: week(28) }, teams), 9);
   assert.equal(upcomingWeek({ 8: week(28), 9: week(4) }, teams), 9);
 });
+
+const faabLeague = (extra = {}) => ({ settings: { waiver_type: 2, waiver_budget: 100, leg: 8, playoff_week_start: 15, ...extra } });
+// A league that's spent exactly at an even pace by Week 8: 7 of 14 weeks left, so $50 each.
+const faabRosters = (used = 50) => [
+  { owner_id: "me", settings: { waiver_budget_used: used } },
+  { owner_id: "them", settings: { waiver_budget_used: used } },
+];
+const wonBid = (bid, extra = {}) => ({ type: "waiver", status: "complete", settings: { waiver_bid: bid }, ...extra });
+
+test("faabMarket: only FAAB leagues, with what's left and only won, paid bids", () => {
+  assert.equal(app.faabMarket({ league: faabLeague({ waiver_type: 0 }), rosters: [], txs: [], userId: "me" }), null);
+  assert.equal(app.faabMarket({ league: faabLeague({ waiver_budget: 0 }), rosters: [], txs: [], userId: "me" }), null);
+  const m = app.faabMarket({
+    league: faabLeague(),
+    rosters: [{ owner_id: "me", settings: { waiver_budget_used: 80 } }, { owner_id: "them", settings: { waiver_budget_used: 20 } }],
+    txs: [wonBid(9), wonBid(3), wonBid(0), wonBid(50, { status: "failed" }), { type: "free_agent", status: "complete", settings: {} }],
+    userId: "me",
+  });
+  assert.equal(m.remaining, 20);
+  assert.equal(m.topOther, 80);
+  assert.equal(m.avgLeft, 50);
+  assert.equal(m.pace, 1);
+  assert.deepEqual(plain(m.bids), [3, 9]);
+});
+
+test("faabMarket: leftover money raises the pace and a spent league lowers it, within limits", () => {
+  assert.equal(app.faabMarket({ league: faabLeague(), rosters: faabRosters(0), txs: [], userId: "me" }).pace, 1.5);
+  assert.equal(app.faabMarket({ league: faabLeague(), rosters: faabRosters(95), txs: [], userId: "me" }).pace, 0.75);
+});
+
+test("faabBid: a share of the budget until the league has enough bids, then the league's own", () => {
+  const few = app.faabMarket({ league: faabLeague(), rosters: faabRosters(), txs: [wonBid(90)], userId: "me" });
+  assert.deepEqual(plain(app.faabBid("Must Add", few)), { low: 15, high: 30, fromLeague: false, capped: false });
+  // Eight winning bids of $1 to $8.
+  const known = app.faabMarket({ league: faabLeague(), rosters: faabRosters(), txs: [1, 2, 3, 4, 5, 6, 7, 8].map((b) => wonBid(b)), userId: "me" });
+  const must = app.faabBid("Must Add", known);
+  assert.equal(must.fromLeague, true);
+  assert.deepEqual([must.low, must.high], [6, 8]);
+  const deep = app.faabBid("Deep League", known);
+  assert.ok(deep.high < must.low, "lower tiers bid less");
+});
+
+test("faabBid: never more than you have, never an inverted range, and a percent with no league", () => {
+  const broke = app.faabMarket({ league: faabLeague(), rosters: [{ owner_id: "me", settings: { waiver_budget_used: 96 } }, { owner_id: "them", settings: { waiver_budget_used: 0 } }], txs: [], userId: "me" });
+  const b = app.faabBid("Must Add", broke);
+  assert.equal(b.capped, true);
+  assert.equal(b.high, 4);
+  assert.ok(b.low <= b.high);
+  assert.deepEqual(plain(app.faabBid("Must Add", null)), { low: 15, high: 30, percent: true });
+  assert.equal(app.faabBid("Unknown tier", null), null);
+  assert.equal(app.faabLabel({ low: 6, high: 8 }), "Bid $6-8");
+  assert.equal(app.faabLabel({ low: 4, high: 4 }), "Bid $4");
+  assert.equal(app.faabLabel({ low: 15, high: 30, percent: true }), "Bid 15-30% of FAAB");
+});
+
+test("playoffWeeks: rounds from the playoff teams and round type, within the season", () => {
+  assert.deepEqual(plain(app.playoffWeeks(null)), [15, 16, 17]);
+  const weeks = (s) => plain(app.playoffWeeks({ settings: s }));
+  assert.deepEqual(weeks({ playoff_week_start: 15, playoff_teams: 6, playoff_round_type: 0 }), [15, 16, 17]);
+  assert.deepEqual(weeks({ playoff_week_start: 15, playoff_teams: 4, playoff_round_type: 1 }), [15, 16, 17]);
+  assert.deepEqual(weeks({ playoff_week_start: 14, playoff_teams: 8, playoff_round_type: 0 }), [14, 15, 16]);
+  assert.deepEqual(weeks({ playoff_week_start: 15, playoff_teams: 6, playoff_round_type: 2 }), [15, 16, 17, 18]);
+});
+
+test("playoffOutlook: rates a schedule by the defenses a position faces", () => {
+  const def = (rank) => ({ WR: { rank, avg: 30 - rank / 2, of: 32 } });
+  const ranks = { EASY: def(2), SOFT: def(6), MID: def(16), HARD: def(30), WALL: def(31) };
+  const game = (opp, home = true) => ({ opp, home, date: "2026-12-20" });
+  const schedule = {
+    15: { WSH: game("EASY"), DAL: game("HARD") },
+    16: { WSH: game("SOFT", false), DAL: game("WALL") },
+    17: { DAL: game("MID") },
+  };
+  const good = app.playoffOutlook("WAS", "WR", [15, 16, 17], schedule, ranks); // WAS is the same team as WSH
+  assert.equal(good.label, "Good");
+  assert.equal(good.avgRank, 4);
+  assert.equal(good.games[0].tag.label, "Good");
+  assert.equal(good.games[1].home, false);
+  assert.equal(good.games[2].bye, true);
+  assert.equal(app.playoffOutlook("DAL", "WR", [15, 16], schedule, ranks).label, "Tough");
+  assert.equal(app.playoffOutlook("DAL", "WR", [17], schedule, ranks).label, "Neutral");
+  // Before stats load: the opponents, no rating. Before the schedule loads, or with no team: nothing.
+  const unrated = app.playoffOutlook("DAL", "WR", [15], schedule, {});
+  assert.equal(unrated.label, null);
+  assert.equal(unrated.games[0].opp, "HARD");
+  assert.equal(app.playoffOutlook("DAL", "WR", [15], {}, ranks), null);
+  assert.equal(app.playoffOutlook(null, "WR", [15], schedule, ranks), null);
+});

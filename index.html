@@ -1167,9 +1167,112 @@ function buildLivePicks({ data, sleeperPlayers, resolve, adds, skip }) {
   };
 }
 
+// What to bid on a waiver target, from its priority tier. `pct` is where the
+// tier sits among the bids this league has actually won (from
+// FAAB_MIN_HISTORY bids up); `share` is the share of the budget to use before
+// that, or with no league connected.
+const FAAB_TIER = {
+  "Must Add": { pct: [0.75, 0.95], share: [0.15, 0.3] },
+  Speculative: { pct: [0.45, 0.7], share: [0.05, 0.12] },
+  Streamer: { pct: [0.15, 0.35], share: [0.01, 0.04] },
+  "Deep League": { pct: [0, 0.15], share: [0, 0.02] },
+};
+const FAAB_MIN_HISTORY = 8;
+const FAAB_PACE_LIMITS = [0.75, 1.5];
+
+const quantileOf = (sorted, q) => {
+  if (!sorted.length) return 0;
+  const at = (sorted.length - 1) * q, lo = Math.floor(at), hi = Math.ceil(at);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo);
+};
+
+// A Sleeper FAAB league's waiver money, or null if it doesn't use FAAB
+// (settings.waiver_type 2). `pace` compares what the league has left with an
+// even spend across the regular season: leftover money pushes bids up, a league
+// that's nearly spent pulls them down.
+function faabMarket({ league, rosters, txs, userId }) {
+  const st = league?.settings;
+  if (st?.waiver_type !== 2 || !st.waiver_budget) return null;
+  const budget = st.waiver_budget;
+  const left = (r) => Math.max(0, budget - (r.settings?.waiver_budget_used || 0));
+  const isMine = (r) => userId && (r.owner_id === userId || (r.co_owners || []).includes(userId));
+  const mine = (rosters || []).find(isMine);
+  const others = (rosters || []).filter((r) => !isMine(r)).map(left);
+  const avgLeft = rosters?.length ? avgOf(rosters.map(left)) : budget;
+  const playoffStart = st.playoff_week_start || 15;
+  const seasonWeeks = Math.max(1, playoffStart - 1);
+  const weeksLeft = Math.min(seasonWeeks, Math.max(1, playoffStart - Math.max(1, st.leg || 1)));
+  const evenPace = (budget * weeksLeft) / seasonWeeks;
+  const pace = Math.min(FAAB_PACE_LIMITS[1], Math.max(FAAB_PACE_LIMITS[0], avgLeft / evenPace));
+  const bids = (txs || []).filter((t) => t.type === "waiver" && t.status === "complete")
+    .map((t) => t.settings?.waiver_bid || 0).filter((b) => b > 0).sort((a, b) => a - b);
+  return { budget, remaining: mine ? left(mine) : null, topOther: others.length ? Math.max(...others) : null, avgLeft, pace, bids };
+}
+
+// The bid range for a tier as { low, high, fromLeague, capped }, in dollars; or
+// { low, high, percent: true } as a share of the budget with no market.
+function faabBid(priority, market) {
+  const tier = FAAB_TIER[priority];
+  if (!tier) return null;
+  if (!market) return { low: Math.round(tier.share[0] * 100), high: Math.round(tier.share[1] * 100), percent: true };
+  const fromLeague = market.bids.length >= FAAB_MIN_HISTORY;
+  const raw = fromLeague ? tier.pct.map((q) => quantileOf(market.bids, q)) : tier.share.map((s) => s * market.budget);
+  let [low, high] = raw.map((x) => Math.round(x * market.pace));
+  high = Math.min(market.budget, Math.max(1, high));
+  low = Math.min(low, high);
+  const capped = market.remaining != null && high > market.remaining;
+  if (capped) { high = market.remaining; low = Math.min(low, high); }
+  return { low, high, fromLeague, capped };
+}
+
+const faabLabel = (b) => {
+  const range = b.low === b.high ? `${b.low}` : `${b.low}-${b.high}`;
+  return b.percent ? `Bid ${range}% of FAAB` : `Bid $${range}`;
+};
+
+// Your league's FAAB market on the waiver page: { connected, market }, with
+// market null until it loads or if the league doesn't use FAAB.
+function useFaabMarket() {
+  const my = React.useContext(MyLeagueContext);
+  const leagueId = my.nfl?.leagueId;
+  const userId = my.nfl?.userId;
+  const [market, setMarket] = useState(null);
+  useEffect(() => {
+    setMarket(null);
+    if (!leagueId) return;
+    let cancelled = false;
+    (async () => {
+      const [league, rosters] = await Promise.all([sleeperGet(`/league/${leagueId}`), sleeperGet(`/league/${leagueId}/rosters`)]);
+      if (league?.settings?.waiver_type !== 2) return;
+      const weeks = Array.from({ length: Math.max(1, league.settings.leg || 1) }, (_, i) => i + 1);
+      const lists = await Promise.all(weeks.map((w) => sleeperGet(`/league/${leagueId}/transactions/${w}`).catch(() => [])));
+      if (!cancelled) setMarket(faabMarket({ league, rosters, txs: lists.flat(), userId }));
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [leagueId, userId]);
+  return { connected: !!leagueId, market };
+}
+
+function FaabSummary({ market }) {
+  const median = quantileOf(market.bids, 0.5);
+  const top = market.bids[market.bids.length - 1];
+  const tile = (label, value) => (
+    <span><span style={{ color: "var(--text-muted)" }}>{label} </span><strong className="tabular-nums" style={{ color: "var(--text-primary)" }}>{value}</strong></span>
+  );
+  return (
+    <div className="rounded-lg border px-4 py-3 flex flex-wrap gap-x-5 gap-y-1 text-sm" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      {market.remaining != null && tile("Your FAAB", `$${market.remaining} of $${market.budget}`)}
+      {market.topOther != null && tile("Most on another team", `$${market.topOther}`)}
+      {tile("League average left", `$${Math.round(market.avgLeft)}`)}
+      {market.bids.length > 0 && tile("Winning bids", `${market.bids.length}, median $${Math.round(median)}, top $${top}`)}
+    </div>
+  );
+}
+
 // Player, priority and reason rows, shared by the live and hand-picked lists.
 // `extra` adds a line under a player's team (the basketball games-left note).
-function PickTable({ rows, ownerOf, emptyText, sport = "nfl", extra }) {
+// `bidOf` gives the FAAB bid to show under a player's priority.
+function PickTable({ rows, ownerOf, emptyText, sport = "nfl", extra, bidOf }) {
   return (
     <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
       <table className="w-full border-collapse text-sm">
@@ -1184,26 +1287,33 @@ function PickTable({ rows, ownerOf, emptyText, sport = "nfl", extra }) {
           {rows.length === 0 && (
             <tr><td colSpan={3} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>{emptyText}</td></tr>
           )}
-          {rows.map((t) => (
-            <tr key={t.id} className="border-b" style={{ borderColor: "var(--border)" }}>
-              <td className="px-3 py-2 align-top">
-                <div><PlayerLink sport={sport} id={t.id} name={t.name} pos={t.position}>{t.name}</PlayerLink></div>
-                <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}><PosBadge pos={t.position} /> {t.team}<RosteredTag owner={ownerOf(t)} /></div>
-                {extra && <div className="mt-0.5">{extra(t)}</div>}
-              </td>
-              <td className="px-3 py-2 align-top">
-                <span className="text-xs font-semibold" style={{ color: WAIVER_PRIORITY_COLOR[t.priority] }}>{t.priority}</span>
-              </td>
-              <td className="px-3 py-2 align-top text-sm" style={{ color: "var(--text-secondary)" }}>{t.note}</td>
-            </tr>
-          ))}
+          {rows.map((t) => {
+            const bid = bidOf && !ownerOf(t) ? bidOf(t) : null;
+            return (
+              <tr key={t.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                <td className="px-3 py-2 align-top">
+                  <div><PlayerLink sport={sport} id={t.id} name={t.name} pos={t.position}>{t.name}</PlayerLink></div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}><PosBadge pos={t.position} /> {t.team}<RosteredTag owner={ownerOf(t)} /></div>
+                  {extra && <div className="mt-0.5">{extra(t)}</div>}
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <span className="text-xs font-semibold" style={{ color: WAIVER_PRIORITY_COLOR[t.priority] }}>{t.priority}</span>
+                  {bid && (
+                    <span className="block text-xs tabular-nums mt-0.5 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}
+                      title={bid.capped ? "Capped at what you have left" : undefined}>{faabLabel(bid)}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 align-top text-sm" style={{ color: "var(--text-secondary)" }}>{t.note}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-function LivePicks({ scores, sleeperPlayers, picks }) {
+function LivePicks({ scores, sleeperPlayers, picks, bidOf }) {
   const { ownerOf, hideRostered, connected } = useRostered("nfl");
   const shown = picks.rows.filter((r) => !(hideRostered && ownerOf(r.sid)));
   const ready = scores.status !== "loading" && Object.keys(sleeperPlayers).length > 0;
@@ -1220,7 +1330,7 @@ function LivePicks({ scores, sleeperPlayers, picks }) {
       {!ready ? (
         <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)" }}>Loading this season's usage from Sleeper…</p>
       ) : (
-        <PickTable rows={shown} ownerOf={(t) => ownerOf(t.sid)}
+        <PickTable rows={shown} ownerOf={(t) => ownerOf(t.sid)} bidOf={bidOf}
           emptyText={picks.week ? "Nobody available has a strong enough recent role to list." : "Live picks start once three weeks have been played."} />
       )}
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -1242,6 +1352,9 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
   const { ownerOf, hideRostered, connected } = useRostered("nfl");
   const ownerOfTarget = (t) => ownerOf(resolve(t.id, t.name, t.position));
   const shownTargets = sortedTargets.filter((t) => !(hideRostered && ownerOfTarget(t)));
+  // FAAB bids: dollars in your FAAB league, a share of the budget with no league, none otherwise.
+  const faab = useFaabMarket();
+  const bidOf = !faab.connected || faab.market ? (t) => faabBid(t.priority, faab.market) : null;
 
   // Two days of Sleeper adds, for the live picks.
   const [adds, setAdds] = useState({});
@@ -1270,7 +1383,7 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
       is shown in its place.
     </div>
   ) : (
-    <PickTable rows={shownTargets} ownerOf={ownerOfTarget} emptyText="Everyone on this list is already rostered in your league." />
+    <PickTable rows={shownTargets} ownerOf={ownerOfTarget} bidOf={bidOf} emptyText="Everyone on this list is already rostered in your league." />
   );
   const handTitle = (
     <>
@@ -1291,17 +1404,21 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
           hand-picked list is curated (last updated {WAIVER_TARGETS_UPDATED_ON}) for one week at a time: update
           the <code>WAIVER_TARGETS</code> array in <code>index.html</code> wholesale as real in-season news comes in.
           Once it's a week behind, the live picks move to the top. The Trending panel pulls live add/drop activity
-          straight from Sleeper's API.
+          straight from Sleeper's API. FAAB bids come from each player's priority: in a connected FAAB league, from the bids
+          your league has won once it has {FAAB_MIN_HISTORY}, adjusted for how much money the league has left and capped at
+          what you have. With no league connected they're a share of the budget. They're a starting point, not a guarantee.
         </AboutData>
       </header>
 
       <MyLeagueBar sport="nfl" />
 
+      {faab.market && <FaabSummary market={faab.market} />}
+
       <SleeperTrending />
 
       {stale ? (
         <>
-          <LivePicks scores={scores} sleeperPlayers={sleeperPlayers} picks={picks} />
+          <LivePicks scores={scores} sleeperPlayers={sleeperPlayers} picks={picks} bidOf={bidOf} />
           <details>
             <summary className="cursor-pointer">{handTitle} <span className="text-xs" style={{ color: "var(--series-amber)" }}>· a week behind</span></summary>
             <p className="text-sm my-2" style={{ color: "var(--text-secondary)" }}>
@@ -1317,7 +1434,7 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
             <div className="flex items-center gap-2 flex-wrap">{handTitle}</div>
             {handPicked}
           </section>
-          <LivePicks scores={scores} sleeperPlayers={sleeperPlayers} picks={picks} />
+          <LivePicks scores={scores} sleeperPlayers={sleeperPlayers} picks={picks} bidOf={bidOf} />
         </>
       )}
     </div>
@@ -3536,7 +3653,7 @@ function tradeBlock(rows, sidelined, outForYear, seasonPpg = null, teams = 12) {
   });
 }
 
-function TradeBlock({ data, settings, setSettings }) {
+function TradeBlock({ data, settings, setSettings, scores }) {
   const resolve = React.useContext(NflIdContext);
   const sleeperPlayers = useSleeperStatuses();
   const seasonOver = useMemo(() => seasonOverIds(sleeperPlayers, resolve), [sleeperPlayers, resolve]);
@@ -3552,6 +3669,15 @@ function TradeBlock({ data, settings, setSettings }) {
     () => tradeBlock(data.rows, (r) => sidelinedReason(r, sleeperPlayers, seasonOver), outForYear, seasonPpg, settings.teams),
     [data.rows, sleeperPlayers, seasonOver, outForYear, seasonPpg, settings.teams]
   );
+  // Contenders buy for the playoffs: each win-now buy's schedule, and a sort by it.
+  const schedule = useNflSchedule(season);
+  const ranks = useMemo(() => defenseRanks(scores?.allowed), [scores?.allowed]);
+  const [winSort, setWinSort] = useState("ppg");
+  const outlookOf = (r) => playoffOutlook(r.team, r.position, DEFAULT_PLAYOFF_WEEKS, schedule, ranks);
+  const canSortByPlayoffs = Object.keys(ranks).length > 0 && !!schedule[DEFAULT_PLAYOFF_WEEKS[0]];
+  const byPlayoffs = (list) => (winSort === "playoffs" && canSortByPlayoffs
+    ? [...list].sort((a, b) => (outlookOf(a)?.avgRank ?? 99) - (outlookOf(b)?.avgRank ?? 99))
+    : list);
   const row = (r, win) => (
     <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
       <span className="min-w-0 truncate">
@@ -3561,6 +3687,7 @@ function TradeBlock({ data, settings, setSettings }) {
         {r.team && <span className="text-xs" style={{ color: "var(--text-muted)" }}> · {r.team}</span>}
         {r.buyLow && <span className="text-xs font-semibold" style={{ color: "var(--series-red)" }}> ▼{Math.round(r.dip * 100)}%</span>}
         {r.injured && <span className="text-xs font-semibold" style={{ color: "var(--series-red)" }}> Out for year</span>}
+        {win && <PlayoffLine outlook={outlookOf(r)} position={r.position} />}
       </span>
       <span className="text-xs tabular-nums shrink-0 text-right" style={{ color: "var(--text-secondary)" }}>
         {win && r.stat ? `${r.stat.ppg.toFixed(1)} PPG` : win ? <>{fmtValue(r.redraftValue)} now</> : fmtValue(r.value)}
@@ -3576,7 +3703,7 @@ function TradeBlock({ data, settings, setSettings }) {
   const bucket = (win) => (
     <div className="grid gap-4 md:grid-cols-2">
       {block.map(({ pos, winNow, youth }) => {
-        const list = win ? winNow : youth;
+        const list = win ? byPlayoffs(winNow) : youth;
         return (
           <div key={pos} className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
             <h4 className="text-sm font-semibold flex items-center gap-2"><PosBadge pos={pos} /></h4>
@@ -3605,7 +3732,10 @@ function TradeBlock({ data, settings, setSettings }) {
           and under worth at least {Math.round(REBUILD_TARGET_MIN_SHARE * 100)}% of the top value, plus players{" "}
           {INJURED_MAX_AGE} and under out for the year but back next season, cheapest while hurt.{" "}
           <span style={{ color: "var(--series-red)" }}>▼</span> marks a buy-low (down {Math.round(BUY_LOW_MIN_DIP * 100)}%+
-          in 30 days and scoring well below their value rank); those rank higher. Values follow the format below.
+          in 30 days and scoring well below their value rank); those rank higher. Values follow the format below. Each
+          veteran's Weeks {DEFAULT_PLAYOFF_WEEKS[0]}-{DEFAULT_PLAYOFF_WEEKS[DEFAULT_PLAYOFF_WEEKS.length - 1]} schedule is
+          rated by the PPR points those defenses have allowed to his position this season: useful as a tiebreaker, since
+          defenses change by December.
         </AboutData>
       </header>
       <LeagueSettings settings={settings} setSettings={setSettings} fields={["qb", "teams", "ppr", "tep"]} />
@@ -3613,7 +3743,14 @@ function TradeBlock({ data, settings, setSettings }) {
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading values…</p>
       ) : (
         <>
-          <ProfileSection title="If you're competing" aside="Veterans scoring like starters, by points per game">
+          <ProfileSection title="If you're competing" aside={winSort === "playoffs" && canSortByPlayoffs ? "Veterans scoring like starters, easiest playoff schedule first" : "Veterans scoring like starters, by points per game"}>
+            {canSortByPlayoffs && (
+              <div className="flex">
+                <LabeledControl label="Sort">
+                  <PillGroup options={[{ key: "ppg", label: "Points per game" }, { key: "playoffs", label: "Playoff schedule" }]} value={winSort} onChange={setWinSort} />
+                </LabeledControl>
+              </div>
+            )}
             {bucket(true)}
           </ProfileSection>
           <ProfileSection title="If you're rebuilding" aside="Young players and injured players back next year, buy-lows first">
@@ -4289,14 +4426,130 @@ function defenseRanks(allowed) {
   return ranks;
 }
 
-// "@ GB · Sun" plus a matchup tag: the 8 defenses allowing the most to that
-// position are a good matchup, the 8 allowing the least a tough one.
+// The 8 defenses allowing the most to a position are a good matchup, the 8
+// allowing the least a tough one. d: a defenseRanks entry.
+const matchupTag = (d) => (!d ? null
+  : d.rank <= 8 ? { label: "Good", color: "var(--trend-up)" }
+  : d.rank > d.of - 8 ? { label: "Tough", color: "var(--series-red)" }
+  : null);
+
+// The fantasy playoff weeks. Sleeper's playoff_round_type: 0 is a week per
+// round, 1 a two-week final, 2 two weeks per round. Without a league: the usual
+// Weeks 15-17.
+const DEFAULT_PLAYOFF_WEEKS = [15, 16, 17];
+function playoffWeeks(league) {
+  const st = league?.settings;
+  if (!st?.playoff_week_start) return DEFAULT_PLAYOFF_WEEKS;
+  const rounds = Math.max(1, Math.ceil(Math.log2(st.playoff_teams || 6)));
+  const games = st.playoff_round_type === 2 ? rounds * 2 : st.playoff_round_type === 1 ? rounds + 1 : rounds;
+  return Array.from({ length: games }, (_, i) => st.playoff_week_start + i).filter((w) => w <= 18);
+}
+
+// One team's playoff games for a position: { games: [{ week, opp, home, tag, d }
+// or { week, bye: true }], avgRank, label }. A rating needs season stats, so
+// avgRank and label are null without them. Good and Tough are an average rank
+// in the top or bottom 12, wider than one week's 8 because averages bunch up.
+const PLAYOFF_RATING_SPAN = 12;
+function playoffOutlook(team, position, weeks, schedule, ranks) {
+  const code = TEAM_ALIASES_NFL[team] || team;
+  if (!code || !weeks.some((w) => schedule?.[w])) return null;
+  const games = weeks.map((week) => {
+    const g = schedule[week]?.[code];
+    if (!g) return { week, bye: true };
+    const d = ranks?.[g.opp]?.[position];
+    return { week, opp: g.opp, home: g.home, d, tag: matchupTag(d) };
+  });
+  const rated = games.filter((g) => g.d);
+  const avgRank = rated.length ? avgOf(rated.map((g) => g.d.rank)) : null;
+  const of = rated[0]?.d.of;
+  const label = avgRank == null ? null : avgRank <= PLAYOFF_RATING_SPAN ? "Good" : avgRank > of - PLAYOFF_RATING_SPAN ? "Tough" : "Neutral";
+  return { games, avgRank, label };
+}
+const PLAYOFF_LABEL_COLOR = { Good: "var(--trend-up)", Tough: "var(--series-red)", Neutral: "var(--text-secondary)" };
+
+const playoffGameTitle = (g, position) => (g.d
+  ? `Week ${g.week}: ${g.opp} allows the ${ordinal(g.d.rank)}-most points to ${position}s (${fmtPts(g.d.avg)} a game)`
+  : `Week ${g.week}${g.opp ? `: ${g.home ? "vs" : "@"} ${g.opp}` : ""}`);
+
+// The season's schedule by week and team ({} until it loads).
+function useNflSchedule(season) {
+  const [schedule, setSchedule] = useState({});
+  useEffect(() => {
+    if (!season) return;
+    let cancelled = false;
+    fetchNflSchedule(season).then((s) => { if (!cancelled) setSchedule(s); });
+    return () => { cancelled = true; };
+  }, [season]);
+  return schedule;
+}
+
+// A compact line for a list: "Playoffs Good · GB @NYJ DAL", colored by matchup.
+function PlayoffLine({ outlook, position }) {
+  if (!outlook) return null;
+  return (
+    <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
+      Playoffs{outlook.label && <span className="font-semibold" style={{ color: PLAYOFF_LABEL_COLOR[outlook.label] }}> {outlook.label}</span>}
+      {" · "}
+      {outlook.games.map((g) => (
+        <span key={g.week} title={playoffGameTitle(g, position)} style={{ color: g.tag?.color }}>{g.bye ? "BYE" : `${g.home ? "" : "@"}${g.opp}`} </span>
+      ))}
+    </span>
+  );
+}
+
+// The shown team's lineup against its fantasy playoff schedule.
+function PlayoffSchedule({ team, league, schedule, ranks }) {
+  const weeks = playoffWeeks(league);
+  const players = (team?.lineup || []).map((l) => l.player).filter(Boolean);
+  const rows = players.map((p) => ({ p, o: playoffOutlook(p.team, p.position, weeks, schedule, ranks) })).filter((r) => r.o);
+  if (rows.length === 0) return null;
+  const count = (label) => rows.filter((r) => r.o.label === label).length;
+  const rated = rows.some((r) => r.o.label);
+  const span = weeks.length > 1 ? `Weeks ${weeks[0]}-${weeks[weeks.length - 1]}` : `Week ${weeks[0]}`;
+  return (
+    <ProfileSection title="Playoff schedule" aside={rated ? `${span} · ${count("Good")} good and ${count("Tough")} tough for ${team.name}'s lineup` : `${span} · ${team.name}'s lineup`}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th scope="col" className="text-left px-2 py-1.5 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Player</th>
+              {weeks.map((w) => <th key={w} scope="col" className="text-left px-2 py-1.5 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Wk {w}</th>)}
+              {rated && <th scope="col" className="text-left px-2 py-1.5 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Outlook</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ p, o }) => (
+              <tr key={p.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                <td className="px-2 py-1.5 whitespace-nowrap">
+                  <PlayerLink id={p.id} pos={p.position} className="">{p.name}</PlayerLink> <PosBadge pos={p.position} />
+                </td>
+                {o.games.map((g) => (
+                  <td key={g.week} className="px-2 py-1.5 whitespace-nowrap tabular-nums" title={playoffGameTitle(g, p.position)}
+                    style={{ color: g.tag?.color || (g.bye ? "var(--text-muted)" : "var(--text-secondary)"), fontWeight: g.tag ? 600 : 400 }}>
+                    {g.bye ? "BYE" : `${g.home ? "" : "@"}${g.opp}`}
+                  </td>
+                ))}
+                {rated && <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: PLAYOFF_LABEL_COLOR[o.label] }}>{o.label || "–"}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        {rated ? "Green is one of the 8 defenses allowing the most PPR points to that position this season, red one of the 8 allowing the least. Outlook averages the games. Defenses change by December, so treat this as a tiebreaker."
+          : "Matchup ratings appear once this season's stats load."}
+      </p>
+    </ProfileSection>
+  );
+}
+
+// "@ GB · Sun" plus a matchup tag.
 function Matchup({ r, game, ranks }) {
   const opp = game?.opp || r.opp;
   if (!opp) return <span style={{ color: "var(--text-muted)" }}>–</span>;
   const day = game?.date ? new Date(game.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }) : null;
   const d = ranks[opp]?.[r.position];
-  const tag = d && (d.rank <= 8 ? { label: "Good", color: "var(--trend-up)" } : d.rank > d.of - 8 ? { label: "Tough", color: "var(--series-red)" } : null);
+  const tag = matchupTag(d);
   return (
     <span className="whitespace-nowrap" title={d ? `${opp} allows the ${ordinal(d.rank)}-most points to ${r.position}s (${fmtPts(d.avg)} a game)` : undefined}>
       <span style={{ color: "var(--text-secondary)" }}>{game ? (game.home ? "vs " : "@ ") : ""}{opp}</span>
@@ -5237,13 +5490,13 @@ function LeaguePulse({ txs, teams, byId, pickRow, ctx, streakOf, hasRecord, slee
 
 // Which sections come first on a league page, by the shown team's situation.
 const LEAGUE_SECTION_ORDER = {
-  Contender: ["matchup", "standings", "team", "pulse", "power", "blocks", "settings"],
-  Rebuilding: ["blocks", "team", "pulse", "standings", "matchup", "power", "settings"],
-  offseason: ["blocks", "team", "pulse", "power", "settings", "matchup", "standings"],
-  default: ["team", "matchup", "standings", "pulse", "blocks", "power", "settings"],
+  Contender: ["matchup", "standings", "playoffs", "team", "pulse", "power", "blocks", "settings"],
+  Rebuilding: ["blocks", "team", "pulse", "standings", "matchup", "playoffs", "power", "settings"],
+  offseason: ["blocks", "team", "pulse", "power", "settings", "matchup", "standings", "playoffs"],
+  default: ["team", "matchup", "standings", "playoffs", "pulse", "blocks", "power", "settings"],
 };
 
-function MyLeagues({ settings, setSettings, navigate }) {
+function MyLeagues({ settings, setSettings, navigate, scores }) {
   const [input, setInput] = useState(() => { try { return localStorage.getItem(SLEEPER_USER_KEY) || ""; } catch (e) { return ""; } });
   const [user, setUser] = useState(null);
   const [leagues, setLeagues] = useState(null);
@@ -5347,6 +5600,9 @@ function MyLeagues({ settings, setSettings, navigate }) {
   const leaguePoints = useMemo(
     () => (showStandings && raw ? (stats) => scoreStats(stats, raw.league.scoring_settings || {}) : null), [showStandings, raw]);
   const seasonPpg = useSeasonPpg(showStandings ? raw?.league.season : null, leaguePoints);
+  const showPlayoffSchedule = showStandings && !["drafting", "complete"].includes(raw.league.status);
+  const playoffGames = useNflSchedule(showPlayoffSchedule ? raw.league.season : null);
+  const defRanks = useMemo(() => defenseRanks(scores?.allowed), [scores?.allowed]);
   const standingOf = useMemo(() => {
     const now = standings.now || [];
     const playoffTeams = Math.min(raw?.league.settings?.playoff_teams || 0, now.length);
@@ -5724,6 +5980,12 @@ function MyLeagues({ settings, setSettings, navigate }) {
           {showStandings && (
             <div className="empty:hidden" style={{ order: orderOf("standings") }}>
               <ProjectedStandings proj={standings} raw={raw} teams={teams} myTeam={myTeam} team={team} onView={viewTeam} />
+            </div>
+          )}
+
+          {showPlayoffSchedule && (
+            <div className="empty:hidden" style={{ order: orderOf("playoffs") }}>
+              <PlayoffSchedule team={team} league={raw.league} schedule={playoffGames} ranks={defRanks} />
             </div>
           )}
 
@@ -9614,9 +9876,9 @@ function App() {
         {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} values={dynasty.rows} />}
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} sleeperPlayers={sleeperPlayers} />}
         {page === "nfl-rankings" && <NflRankings settings={settings} setSettings={setSettings} scores={liveScores} />}
-        {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} />}
+        {page === "leagues" && <MyLeagues settings={settings} setSettings={setSettings} navigate={navigate} scores={liveScores} />}
         {page === "targets" && (
-          <TradeBlock data={settings.mode === "dynasty" ? dynasty : classValues} settings={settings} setSettings={setSettings} />
+          <TradeBlock data={settings.mode === "dynasty" ? dynasty : classValues} settings={settings} setSettings={setSettings} scores={liveScores} />
         )}
         {page === "draftboard" && <DraftBoard data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "player" && <NflProfile dynasty={dynasty} settings={settings} />}

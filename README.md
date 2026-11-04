@@ -237,7 +237,7 @@ did-not-play list and show **OUT**, both in the grid and at the bottom of the
 by-week table. Weeks inside an Injured Reserve stint show **IR** instead,
 including future weeks up to the player's earliest possible return (or the
 rest of the season for season-ending injuries). OUT and IR weeks don't
-count toward GP or AVG.
+count toward AVG.
 
 **Usage columns.** On desktop the by-week table also shows each scorer's
 opponent, share of the team's offensive snaps, targets and carries, from the
@@ -838,7 +838,7 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   average per game (the FPG and Total headers do the same). A **Top scorers** view (`NbaTopScorers`) ranks the
   season's top 50 by total fantasy points, sortable by FPG or real points
   per game (those two need the Big Board's minimum games). On phones the
-  Pos, Games, GP and FPG columns fold into a line under each name, so the
+  Pos, Games and FPG columns fold into a line under each name, so the
   Total stays on screen.
 - **Waiver Desk** (`NbaWaivers`): **Today's pickups** first (`NbaPickups`), a
   Must Add / Speculative / Streamer / Deep League list re-picked every morning

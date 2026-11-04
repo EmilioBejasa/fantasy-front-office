@@ -1471,7 +1471,7 @@ const CELL_LABEL = { bye: "BYE", ir: "IR", out: "OUT", blank: "–" };
 const CELL_COLOR = { ir: "var(--series-red)", out: "var(--series-amber)" };
 
 // Modeled on FantasyPros' own "Weekly Fantasy Football Leaders" report
-// (RK / Player / POS / GP / Wk1…Wk18 / AVG / TTL, sortable by AVG or TTL) —
+// (RK / Player / POS / Wk1…Wk18 / AVG / TTL, sortable by AVG or TTL) —
 // same shape, backed by this app's own real-results-only weekly scores.
 function SortHeader({ label, active, onClick, className = "" }) {
   return (
@@ -1519,8 +1519,6 @@ function SeasonGrid({ players, positionFilter, data }) {
               style={{ color: "var(--text-muted)", background: "var(--surface-1)", left: "2.5rem" }}>Player</th>
             <th className="text-left px-2 py-2 text-xs font-semibold sticky top-0 z-10"
               style={{ color: "var(--text-muted)", background: "var(--surface-1)" }}>Pos</th>
-            <th className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10"
-              style={{ color: "var(--text-muted)", background: "var(--surface-1)" }}>GP</th>
             {ALL_WEEKS.map((w) => (
               <th key={w} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10"
                 style={{ color: "var(--text-muted)", background: "var(--surface-1)", minWidth: "2.75rem" }}>
@@ -1543,7 +1541,6 @@ function SeasonGrid({ players, positionFilter, data }) {
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>{p.team}</span>
                 </td>
                 <td className="px-2 py-1.5"><PosBadge pos={p.position} /></td>
-                <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{p.gp}</td>
                 {p.cells.map((c, wi) => (
                   <td key={wi} className="px-2 py-1.5 text-right tabular-nums"
                     style={{
@@ -7051,8 +7048,8 @@ function NbaScoreboard({ data, settings, setSettings }) {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                {["RK", "Player", "Pos", "Games", "GP"].map((h, i) => (
-                  <th key={h} className={`px-3 py-2 text-xs font-semibold sticky top-0 z-10 ${i >= 4 || i === 0 ? "text-right" : "text-left"} ${i >= 2 ? "hidden sm:table-cell" : ""}`}
+                {["RK", "Player", "Pos", "Games"].map((h, i) => (
+                  <th key={h} className={`px-3 py-2 text-xs font-semibold sticky top-0 z-10 ${i === 0 ? "text-right" : "text-left"} ${i >= 2 ? "hidden sm:table-cell" : ""}`}
                     style={{ color: "var(--text-muted)" }}>{h}</th>
                 ))}
                 <SortHeader label="FPG" active={sortBy === "fpg"} onClick={() => setSortBy("fpg")} className="hidden sm:table-cell" />
@@ -7063,7 +7060,7 @@ function NbaScoreboard({ data, settings, setSettings }) {
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games this week.</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games this week.</td></tr>
               )}
               {rows.map((r, i) => (
                 <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
@@ -7080,7 +7077,6 @@ function NbaScoreboard({ data, settings, setSettings }) {
                   <td className="px-3 py-1.5 hidden sm:table-cell">
                     <span className="flex gap-1 flex-wrap">{gameChips(r.games)}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>{r.games.length}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums hidden sm:table-cell ${sortBy === "fpg" ? "font-semibold" : ""}`}
                     style={{ color: sortBy === "fpg" ? "var(--text-primary)" : "var(--text-secondary)" }}>{fmt1(r.fpg)}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${sortBy === "total" ? "font-semibold" : ""}`}
@@ -7122,7 +7118,7 @@ function NbaTopScorers({ data, season, pos, scoring }) {
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>
-            {["RK", "Player", "Pos", "GP"].map((h, i) => (
+            {["RK", "Player", "Pos"].map((h, i) => (
               <th key={h} className={`px-3 py-2 text-xs font-semibold sticky top-0 z-10 ${i === 1 || i === 2 ? "text-left" : "text-right"}`}
                 style={{ color: "var(--text-muted)" }}>{h}</th>
             ))}
@@ -7136,7 +7132,7 @@ function NbaTopScorers({ data, season, pos, scoring }) {
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={9} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games yet.</td></tr>
+            <tr><td colSpan={8} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games yet.</td></tr>
           )}
           {rows.map((r, i) => (
             <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
@@ -7147,7 +7143,6 @@ function NbaTopScorers({ data, season, pos, scoring }) {
                 <NbaInjuryTag status={data.players[r.id]?.status} />
               </td>
               <td className="px-3 py-1.5"><PosBadge pos={r.position} /></td>
-              <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.gp}</td>
               {[["total", r.total], ["fpg", r.fpg], ["ppg", r.ppg]].map(([k, v]) => (
                 <td key={k} className={`px-3 py-1.5 text-right tabular-nums ${sortBy === k ? "font-semibold" : ""}`}
                   style={{ color: sortBy === k ? "var(--text-primary)" : "var(--text-secondary)" }}>{fmt1(v)}</td>
@@ -7177,7 +7172,6 @@ function LabeledControl({ label, children }) {
 const NBA_RANK_SORTS = {
   fpg: (a, b) => b.fpg - a.fpg,
   total: (a, b) => b.total - a.total,
-  gp: (a, b) => b.gp - a.gp || b.fpg - a.fpg,
 };
 const NBA_PER_GAME = [["pts", "PTS"], ["reb", "REB"], ["ast", "AST"], ["stl", "STL"], ["blk", "BLK"], ["tpm", "3PM"], ["to", "TO"]];
 
@@ -7241,7 +7235,6 @@ function NbaRankings({ data, settings, setSettings }) {
               <th className="text-right px-3 py-2 text-xs font-semibold sticky top-0 z-10" style={{ color: "var(--text-muted)" }}>RK</th>
               <th className="text-left px-3 py-2 text-xs font-semibold sticky top-0 z-10" style={{ color: "var(--text-muted)" }}>Player</th>
               <th className="text-left px-3 py-2 text-xs font-semibold sticky top-0 z-10" style={{ color: "var(--text-muted)" }}>Pos</th>
-              <SortHeader label="GP" active={sortBy === "gp"} onClick={() => setSortBy("gp")} />
               {hasGames && ["G left", "Next"].map((h) => (
                 <th key={h} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10 whitespace-nowrap" style={{ color: "var(--text-muted)" }}
                   title={h === "G left" ? "Games the team still has this fantasy week" : "Games next fantasy week"}>{h}</th>
@@ -7255,7 +7248,7 @@ function NbaRankings({ data, settings, setSettings }) {
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={15} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No matches.</td></tr>
+              <tr><td colSpan={14} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No matches.</td></tr>
             )}
             {rows.map((r, i) => (
               <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
@@ -7266,7 +7259,6 @@ function NbaRankings({ data, settings, setSettings }) {
                   <NbaInjuryTag status={data.players[r.id]?.status} />
                 </td>
                 <td className="px-3 py-1.5"><PosBadge pos={r.position} /></td>
-                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.gp}</td>
                 {hasGames && (() => {
                   const g = games[data.players[r.id]?.team || r.team];
                   return <>
@@ -7576,8 +7568,6 @@ function NbaReturnCell({ est }) {
 function NbaInjuries({ data, settings }) {
   const [pos, setPos] = useState("ALL");
   const returns = useNbaReturns();
-  const season = data.activeSeason;
-  const byId = useMemo(() => Object.fromEntries((data.seasons[season] || []).map((p) => [p.id, p])), [data, season]);
   // The Trade Desk's FPG, which blends in last season until a player has
   // enough games, so injured regulars still count early in the season.
   const fpgById = useMemo(
@@ -7587,10 +7577,10 @@ function NbaInjuries({ data, settings }) {
 
   const rows = useMemo(() => Object.entries(data.players)
     .filter(([, p]) => NBA_STATUSES.includes(p.status) && nbaPosMatch(p, pos))
-    .map(([id, p]) => ({ id, ...p, season: byId[id], fpg: fpgById[id] ?? null }))
+    .map(([id, p]) => ({ id, ...p, fpg: fpgById[id] ?? null }))
     .filter((r) => r.fpg >= 15)
     .sort((a, b) => NBA_STATUSES.indexOf(a.status) - NBA_STATUSES.indexOf(b.status) || (b.fpg ?? 0) - (a.fpg ?? 0)),
-  [data.players, byId, fpgById, pos]);
+  [data.players, fpgById, pos]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -7598,8 +7588,7 @@ function NbaInjuries({ data, settings }) {
         Live from Sleeper's NBA player data (refreshed hourly). Out and IR are the most serious, then suspended,
         doubtful and questionable; GTD is a game-time decision and DTD day-to-day. Fantasy-relevant means 15+ fantasy
         points per game ({settings.scoring === "espn" ? "ESPN" : "Standard"} scoring), the same blend the Trade Desk uses:
-        this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. GP is games played
-        in {nbaSeasonLabel(season)}. Expected back comes from ESPN's injury feed. The dates are ESPN's estimates, not team
+        this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. Expected back comes from ESPN's injury feed. The dates are ESPN's estimates, not team
         announcements, and many are rough, so a report saying there's no timetable, or a stated timeline well past the
         date, replaces the date. Stated timelines count from when they were reported, which may be a while ago.
       </NbaPageHeader>
@@ -7614,14 +7603,14 @@ function NbaInjuries({ data, settings }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["Player", "Pos", "Status", "Injury", "Expected back", "FPG", "GP"].map((h, i) => (
+              {["Player", "Pos", "Status", "Injury", "Expected back", "FPG"].map((h, i) => (
                 <th key={h} className={`px-3 py-2 text-xs font-semibold whitespace-nowrap ${i >= 5 ? "text-right" : "text-left"}`} style={{ color: "var(--text-muted)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody on the injury report here right now.</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody on the injury report here right now.</td></tr>
             )}
             {rows.map((r) => (
               <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
@@ -7640,7 +7629,6 @@ function NbaInjuries({ data, settings }) {
                 </td>
                 <NbaReturnCell est={returns[nbaNameKey(r.name)]} />
                 <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{fmt1(r.fpg)}</td>
-                <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.season ? r.season.gp : r.fpg != null ? 0 : "–"}</td>
               </tr>
             ))}
           </tbody>

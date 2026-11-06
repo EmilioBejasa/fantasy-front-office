@@ -673,24 +673,24 @@ const ALL_WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
 
 
 
-// Players on injured reserve (or reserve/PUP) as of 2026-11-04, plus the ones
+// Players on injured reserve (or reserve/PUP) as of 2026-11-06, plus the ones
 // whose seasons are over, from Sleeper's injury designations and team news.
 // Both lists carry a four-game minimum, so the grid shows "IR" from
 // `sinceWeek` through the earliest week they're allowed back (see irReturnWeek),
 // or through Week 18 when `seasonEnding` is set. `sinceWeek` is the first game
 // of their current absence — 1 for players who started the season there.
-const INJURED_RESERVE_UPDATED_ON = "2026-11-04";
+const INJURED_RESERVE_UPDATED_ON = "2026-11-06";
 const INJURED_RESERVE = [
   { id: "achane", list: "IR", injury: "Torn ACL", sinceWeek: 4, seasonEnding: true },
   { id: "dart", list: "IR", injury: "Knee (MCL, PCL, meniscus surgery)", sinceWeek: 3, seasonEnding: true },
   { id: "higgins-jayden", list: "IR", injury: "Torn ACL", sinceWeek: 1, seasonEnding: true },
-  { id: "tyson-jordyn", list: "IR", injury: "Hamstring (practice window opening Nov 4)", sinceWeek: 1 },
+  { id: "tyson-jordyn", list: "IR", injury: "Hamstring (practice window opened Nov 4; questionable Week 9, must be activated by Saturday to play)", sinceWeek: 1 },
   { id: "brooks-jonathon", list: "IR", injury: "Core muscle (surgery; 6-8 weeks)", sinceWeek: 3 },
   { id: "conner-james", list: "IR", injury: "Foot (2025 surgery; no practice yet, could \"potentially\" play this year)", sinceWeek: 1 },
   { id: "pierce-alec", list: "IR", injury: "Left heel (re-aggravated, surgically repaired)", sinceWeek: 3 },
   { id: "stribling", list: "IR", injury: "Left ankle (torn deltoid, surgery; ~10 weeks)", sinceWeek: 2 },
   { id: "benson-trey", list: "IR", injury: "Knee (cleared waivers, reverted to IR)", sinceWeek: 1, seasonEnding: true },
-  { id: "njoku-david", list: "IR", injury: "Fibula (practice window expected this week)", sinceWeek: 3 },
+  { id: "njoku-david", list: "IR", injury: "Fibula (practice window opened this week; doubtful Week 9)", sinceWeek: 3 },
   { id: "pacheco", list: "IR", injury: "Back (nerve surgery; chance to return late December)", sinceWeek: 1 },
   { id: "tonges-jake", list: "IR", injury: "Torn MCL (surgery)", sinceWeek: 2, seasonEnding: true },
   { id: "pearsall-ricky", list: "IR", injury: "Knee (PCL surgery)", sinceWeek: 1, seasonEnding: true },
@@ -704,25 +704,25 @@ const INJURED_RESERVE = [
   { id: "pittman", list: "IR", injury: "Foot (plantar fasciitis)", sinceWeek: 5 },
   { id: "bigsby", list: "IR", injury: "Core muscle (surgery)", sinceWeek: 5 },
   { id: "mcmillan-jalen", list: "IR", injury: "Left knee (PCL sprain; 6-8 weeks)", sinceWeek: 4 },
-  { id: "ferguson-terrance", list: "IR", injury: "Ankle sprain (could practice Week 9)", sinceWeek: 4 },
+  { id: "ferguson-terrance", list: "IR", injury: "Ankle sprain, hamstring (practice window opened Nov 4; out Week 9)", sinceWeek: 4 },
   { id: "croskeymerritt", list: "IR", injury: "Groin (re-aggravated)", sinceWeek: 6 },
   { id: "doubs", list: "IR", injury: "Right shoulder", sinceWeek: 7 },
   { id: "adams-d", list: "IR", injury: "Hamstring (ruptured, surgery; out 6-10 weeks)", sinceWeek: 7 },
   { id: "sl-11577", list: "IR", injury: "Foot (partially torn plantar fascia)", sinceWeek: 6 },
   { id: "sl-11630", list: "IR", injury: "Finger (dislocated)", sinceWeek: 6 },
   { id: "sl-10226", list: "IR", injury: "Left thumb (torn ligament, surgery; on track for Week 10)", sinceWeek: 3 },
-  { id: "sl-11370", list: "IR", injury: "Ankle", sinceWeek: 5 },
+  { id: "sl-11370", list: "IR", injury: "Ankle (practice window opened Nov 4; questionable Week 9)", sinceWeek: 5 },
   { id: "sl-11626", list: "IR", injury: "Knee (hurt Week 2, IR Oct 3)", sinceWeek: 5 },
   { id: "sl-12472", list: "IR", injury: "Hip", sinceWeek: 6 },
-  { id: "sl-12492", list: "IR", injury: "Ankle sprain", sinceWeek: 5 },
-  { id: "sl-3286", list: "IR", injury: "Right high-ankle sprain", sinceWeek: 3 },
-  { id: "sl-4177", list: "IR", injury: "Calf (expected to practice Nov 4; could play Week 9)", sinceWeek: 5 },
+  { id: "sl-12492", list: "IR", injury: "Ankle sprain (practice window opened Nov 4; questionable Week 9, expected to be activated and play)", sinceWeek: 5 },
+  { id: "sl-3286", list: "IR", injury: "Right high-ankle sprain (practice window opened Nov 4; questionable Week 9, likely activated Saturday)", sinceWeek: 3 },
+  { id: "sl-4177", list: "IR", injury: "Calf (practice window opened Nov 4; questionable Week 9)", sinceWeek: 5 },
   { id: "sl-5409", list: "IR", injury: "Pectoral strain", sinceWeek: 6 },
   { id: "sl-7204", list: "IR", injury: "Ankle and knee", sinceWeek: 5 },
   { id: "sl-7535", list: "IR", injury: "Right knee", sinceWeek: 5 },
   { id: "sl-8168", list: "IR", injury: "Ankle", sinceWeek: 6 },
   { id: "sl-8188", list: "IR", injury: "Ankle (dislocation, surgery; out 12-16 weeks)", sinceWeek: 5 },
-  { id: "sl-8195", list: "IR", injury: "Calf", sinceWeek: 3 },
+  { id: "sl-8195", list: "IR", injury: "Calf (practice window opened Nov 4)", sinceWeek: 3 },
   { id: "mclaurin", list: "IR", injury: "Torn patellar tendon (surgery)", sinceWeek: 7, seasonEnding: true },
   { id: "sl-6826", list: "IR", injury: "Right knee", sinceWeek: 8, seasonEnding: true },
   { id: "jaylin-noel", list: "IR", injury: "Turf toe (surgery)", sinceWeek: 8, seasonEnding: true },
@@ -740,6 +740,7 @@ const INJURED_RESERVE = [
   { id: "sl-4219", list: "IR", injury: "Midfoot (could be months)", sinceWeek: 9 },
   { id: "sl-8129", list: "IR", injury: "Undisclosed (hurt Week 7)", sinceWeek: 8 },
   { id: "sl-8208", list: "IR", injury: "Thumb (hurt Week 6)", sinceWeek: 7 },
+  { id: "sl-11299", list: "IR", injury: "Wrist per the team, thumb per the Tribune (IR Nov 5; could return after the minimum)", sinceWeek: 9 },
 ];
 const IR_MIN_GAMES = 4;
 const INJURED_BY_ID = Object.fromEntries(INJURED_RESERVE.map((r) => [r.id, r]));

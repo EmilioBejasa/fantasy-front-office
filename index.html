@@ -7896,10 +7896,14 @@ function nbaTradeRows(data, scoring) {
   const teamGames = Math.max(0, ...cur.map((p) => p.gp));
   const inSeason = state.season_type === "regular" && teamGames > 0;
   const gamesLeft = inSeason ? Math.max(NBA_TEAM_GAMES - teamGames, 1) : NBA_TEAM_GAMES;
+  // players holds only active players on a team, so someone with last season's
+  // stats but no games this season and no team (retired, unsigned) is left out.
+  const knowsRosters = Object.keys(players || {}).length > 0;
 
   const rows = [];
   for (const id of new Set([...cur.map((p) => p.id), ...prev.map((p) => p.id)])) {
     const c = curById[id], p = prevById[id];
+    if (!c && knowsRosters && !players[id]) continue;
     const curGp = c ? c.gp : 0;
     const prevFpg = p ? nbaFpg(p, scoring) : null;
     const k = prevFpg != null ? Math.max(0, NBA_BLEND_GAMES - curGp) : 0;

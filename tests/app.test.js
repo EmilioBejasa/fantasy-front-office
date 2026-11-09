@@ -623,3 +623,20 @@ test("nbaGridRows: weekly totals, season total and points per game", () => {
   assert.deepEqual(plain(app.nbaGridRows(weeks, { scoring, sortBy: "avg" })).map((r) => r.id), ["b", "a"]);
   assert.deepEqual(plain(app.nbaGridRows(weeks, { scoring, pos: "C" })).map((r) => r.id), ["b"]);
 });
+
+test("nbaTradeRows: a retired or unsigned player with only last season's stats is left out", () => {
+  const line = (id, name, gp, pts) => ({ id, name, position: "PG", team: "SAC", gp, stats: { pts } });
+  const data = {
+    state: { season: "2026", previous_season: "2025", season_type: "regular" },
+    seasons: {
+      2026: [line("1", "Active Vet", 10, 200)],
+      2025: [line("1", "Active Vet", 70, 1400), line("1434", "Russell Westbrook", 64, 971), line("2", "Hurt Starter", 60, 1500)],
+    },
+    // Only active players on a team, like Sleeper's trimmed list.
+    players: { 1: { name: "Active Vet", team: "SAC" }, 2: { name: "Hurt Starter", team: "BOS" } },
+  };
+  const ids = [...app.nbaTradeRows(data, { pts: 1 }).rows.map((r) => r.id)].sort();
+  assert.equal(ids.join(), "1,2");
+  // Without the player list (it failed to load), nobody is dropped.
+  assert.equal(app.nbaTradeRows({ ...data, players: {} }, { pts: 1 }).rows.length, 3);
+});

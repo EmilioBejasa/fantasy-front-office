@@ -7131,7 +7131,6 @@ const NBA_STATUS_LABEL = { GTD: "Game-time decision", DTD: "Day-to-day", Sus: "S
 const NBA_WEEKLY_VIEWS = [
   { key: "week", label: "By Week" },
   { key: "grid", label: "Season Grid" },
-  { key: "leaders", label: "Top scorers" },
 ];
 // The grid lists this many players (by the chosen sort), so it stays quick.
 const NBA_GRID_ROWS = 300;
@@ -7243,7 +7242,6 @@ function NbaScoreboard({ data, settings, setSettings }) {
   const week = pickedWeek && pickedWeek <= weeks ? pickedWeek : weeks;
   const [pos, setPos] = useState("ALL");
   const [view, setView] = useState("week");
-  const [sortBy, setSortBy] = useState("total");
   const res = useNbaWeek(data, season, week, view === "week");
   // A new fantasy week opens Monday before its first game, so until then open
   // on last week rather than an empty table.
@@ -7251,36 +7249,16 @@ function NbaScoreboard({ data, settings, setSettings }) {
     if (!pickedWeek && res.status === "live" && res.players.length === 0 && week > 1) setWeek(week - 1);
   }, [res, pickedWeek, week]);
 
-  const rows = useMemo(() => res.players
-    .filter((p) => nbaPosMatch(p, pos))
-    .map((p) => {
-      const games = p.games.map((g) => ({ ...g, fp: nbaPoints(g.stats, settings.scoring) }));
-      const total = games.reduce((s, g) => s + g.fp, 0);
-      return { ...p, games, total, fpg: total / games.length };
-    })
-    .sort(sortBy === "fpg" ? (a, b) => b.fpg - a.fpg || b.total - a.total : (a, b) => b.total - a.total),
-  [res.players, pos, settings.scoring, sortBy]);
-
-  const day = (d) => new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" });
-  const gameChips = (games) => games.map((g) => (
-    <span key={g.date} className="text-[11px] tabular-nums rounded px-1.5 py-0.5 whitespace-nowrap"
-      title={`${day(g.date)} vs ${g.opp || "?"}: ${fmt1(g.fp)} pts`}
-      style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}>
-      {day(g.date).split(",")[0]} <strong style={{ color: "var(--text-primary)" }}>{fmt1(g.fp)}</strong>
-    </span>
-  ));
-
   return (
     <div className="flex flex-col gap-5">
       <NbaPageHeader title="Weekly Scores" lead={view === "week"
-        ? "Every player's fantasy points for one fantasy week (Monday to Sunday), game by game."
-        : view === "grid"
-          ? `Every player's fantasy points by fantasy week, as a full Week 1-${NBA_SEASON_WEEKS} season grid with a running total.`
-          : `The season's top fantasy scorers so far in ${settings.scoring === "espn" ? "ESPN" : "Standard"} scoring.`}>
+        ? "Every player's fantasy points for one fantasy week (Monday to Sunday), best first."
+        : `Every player's fantasy points by fantasy week, as a full Week 1-${NBA_SEASON_WEEKS} season grid with a running total.`}>
         Live from Sleeper's NBA stats. A fantasy week runs Monday to Sunday, so players can have anywhere from zero to
-        four or five games; the total is what counts in a weekly head-to-head points matchup. The Season Grid shows each
-        week's total side by side (the top {NBA_GRID_ROWS} by the chosen sort), with AVG as points per game. Top scorers
-        ranks season totals instead. {NBA_SCORING_NOTE[settings.scoring]}
+        four or five games; the total is what counts in a weekly head-to-head points matchup. By Week ranks one week:
+        G is games that week, FPG fantasy points per game, and PPG, REB and AST per game. The Season Grid shows each
+        week's total side by side (the top {NBA_GRID_ROWS} by the chosen sort), with AVG as points per game.{" "}
+        {NBA_SCORING_NOTE[settings.scoring]}
       </NbaPageHeader>
       <NbaSeasonNote data={data} />
 
@@ -7299,128 +7277,84 @@ function NbaScoreboard({ data, settings, setSettings }) {
           <PillGroup options={NBA_POSITION_OPTIONS} value={pos} onChange={setPos} />
         </LabeledControl>
       </div>
-      {view === "week" && (
-        <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-          <LabeledControl label="Week">
-            <PillGroup options={Array.from({ length: weeks }, (_, i) => ({ key: i + 1, label: `Wk ${i + 1}` }))} value={week} onChange={setWeek} scroll />
-          </LabeledControl>
-          <LabeledControl label="Sort">
-            <PillGroup options={[{ key: "total", label: "Total" }, { key: "fpg", label: "Average" }]} value={sortBy} onChange={setSortBy} />
-          </LabeledControl>
-        </div>
-      )}
 
-      {view === "leaders" && <NbaTopScorers data={data} season={season} pos={pos} scoring={settings.scoring} />}
       {view === "grid" && <NbaSeasonGrid data={data} season={season} pos={pos} scoring={settings.scoring} />}
       {view === "week" && <>
-      {res.status === "loading" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading Week {week}…</p>}
-      {res.status === "error" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Couldn't load Week {week} ({res.message}).</p>}
-      {res.status === "live" && (
-        <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "75vh" }}>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                {["RK", "Player", "Pos", "Games"].map((h, i) => (
-                  <th key={h} className={`px-3 py-2 text-xs font-semibold sticky top-0 z-10 ${i === 0 ? "text-right" : "text-left"} ${i >= 2 ? "hidden sm:table-cell" : ""}`}
-                    style={{ color: "var(--text-muted)" }}>{h}</th>
-                ))}
-                <SortHeader label="FPG" active={sortBy === "fpg"} onClick={() => setSortBy("fpg")} className="hidden sm:table-cell" />
-                {/* On phones the FPG column is hidden, so Total shows the average when that's the sort. */}
-                <SortHeader label={<><span className="sm:hidden">{sortBy === "fpg" ? "FPG" : "Total"}</span><span className="hidden sm:inline">Total</span></>}
-                  active={sortBy === "total"} onClick={() => setSortBy("total")} />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games this week.</td></tr>
-              )}
-              {rows.map((r, i) => (
-                <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{i + 1}</td>
-                  <td className="px-3 py-1.5 sm:whitespace-nowrap">
-                    <PlayerLink sport="nba" id={r.id}>{r.name}</PlayerLink>{" "}
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team}</span>
-                    {/* Phones: the hidden columns' details go on a line under the name. */}
-                    <div className="sm:hidden flex items-center gap-1 flex-wrap mt-1">
-                      <PosBadge pos={r.position} />{gameChips(r.games)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-1.5 hidden sm:table-cell"><PosBadge pos={r.position} /></td>
-                  <td className="px-3 py-1.5 hidden sm:table-cell">
-                    <span className="flex gap-1 flex-wrap">{gameChips(r.games)}</span>
-                  </td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums hidden sm:table-cell ${sortBy === "fpg" ? "font-semibold" : ""}`}
-                    style={{ color: sortBy === "fpg" ? "var(--text-primary)" : "var(--text-secondary)" }}>{fmt1(r.fpg)}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${sortBy === "total" ? "font-semibold" : ""}`}
-                    style={{ color: sortBy === "total" ? "var(--text-primary)" : "var(--text-secondary)" }}>
-                    <span className="sm:hidden">{fmt1(sortBy === "fpg" ? r.fpg : r.total)}</span><span className="hidden sm:inline">{fmt1(r.total)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <PillGroup options={Array.from({ length: weeks }, (_, i) => ({ key: i + 1, label: `Wk ${i + 1}` }))} value={week} onChange={setWeek} scroll />
         </div>
-      )}
+        {res.status === "loading" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading Week {week}…</p>}
+        {res.status === "error" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Couldn't load Week {week} ({res.message}).</p>}
+        {res.status === "live" && <NbaWeekLeaders data={data} players={res.players} pos={pos} scoring={settings.scoring} />}
       </>}
     </div>
   );
 }
 
-// Season-to-date leaders for the Scoreboard's Top scorers view. Total ranks
-// everyone who has played; FPG and PPG need the same games as the Big Board,
-// so one big night doesn't top the list.
-const NBA_LEADER_SORTS = {
+// One fantasy week's leaders for the Scoreboard's By Week view (the old Top
+// scorers table, for a single week). players: useNbaWeek's list.
+const NBA_WEEK_SORTS = {
   total: (a, b) => b.total - a.total,
-  fpg: (a, b) => b.fpg - a.fpg,
-  ppg: (a, b) => b.ppg - a.ppg,
+  fpg: (a, b) => b.fpg - a.fpg || b.total - a.total,
+  ppg: (a, b) => b.ppg - a.ppg || b.total - a.total,
 };
 
-function NbaTopScorers({ data, season, pos, scoring }) {
+// A week's games summed into one stat line: { gp, stats }.
+function nbaWeekLine(games) {
+  const stats = {};
+  for (const g of games) for (const k in g.stats) stats[k] = (stats[k] || 0) + (g.stats[k] || 0);
+  return { gp: games.length, stats };
+}
+
+function NbaWeekLeaders({ data, players, pos, scoring }) {
   const [sortBy, setSortBy] = useState("total");
-  const all = data.seasons[season] || [];
-  const minGp = sortBy === "total" ? 1 : nbaMinGames(all, season, data);
-  const rows = useMemo(() => all
-    .filter((p) => p.gp >= minGp && nbaPosMatch(p, pos))
-    .map((p) => ({ ...p, total: nbaPoints(p.stats, scoring), fpg: nbaFpg(p, scoring), ppg: (p.stats.pts || 0) / p.gp }))
-    .sort(NBA_LEADER_SORTS[sortBy])
-    .slice(0, 50), [all, minGp, pos, sortBy, scoring]);
+  const rows = useMemo(() => players
+    .filter((p) => nbaPosMatch(p, pos) && p.games.length > 0)
+    .map((p) => {
+      const { gp, stats } = nbaWeekLine(p.games);
+      const total = p.games.reduce((sum, g) => sum + nbaPoints(g.stats, scoring), 0);
+      return { ...p, gp, stats, total, fpg: total / gp, ppg: (stats.pts || 0) / gp };
+    })
+    .sort(NBA_WEEK_SORTS[sortBy]), [players, pos, sortBy, scoring]);
 
   return (
     <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "75vh" }}>
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>
-            {["RK", "Player", "Pos"].map((h, i) => (
+            {["RK", "Player", "Pos", "G"].map((h, i) => (
               <th key={h} className={`px-3 py-2 text-xs font-semibold sticky top-0 z-10 ${i === 1 || i === 2 ? "text-left" : "text-right"}`}
-                style={{ color: "var(--text-muted)" }}>{h}</th>
+                style={{ color: "var(--text-muted)", background: "var(--surface-1)" }}>{h}</th>
             ))}
             <SortHeader label="Total" active={sortBy === "total"} onClick={() => setSortBy("total")} />
             <SortHeader label="FPG" active={sortBy === "fpg"} onClick={() => setSortBy("fpg")} />
-            <SortHeader label="PPG" active={sortBy === "ppg"} onClick={() => setSortBy("ppg")} />
+            <SortHeader label="PPG" active={sortBy === "ppg"} onClick={() => setSortBy("ppg")} className="hidden sm:table-cell" />
             {["REB", "AST"].map((h) => (
-              <th key={h} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10" style={{ color: "var(--text-muted)" }}>{h}</th>
+              <th key={h} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10 hidden sm:table-cell"
+                style={{ color: "var(--text-muted)", background: "var(--surface-1)" }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={8} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games yet.</td></tr>
+            <tr><td colSpan={9} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games this week.</td></tr>
           )}
           {rows.map((r, i) => (
             <tr key={r.id} className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
               <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{i + 1}</td>
               <td className="px-3 py-1.5 whitespace-nowrap">
                 <PlayerLink sport="nba" id={r.id}>{r.name}</PlayerLink>{" "}
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{data.players[r.id]?.team || r.team}</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team || data.players[r.id]?.team}</span>
                 <NbaInjuryTag status={data.players[r.id]?.status} />
               </td>
               <td className="px-3 py-1.5"><PosBadge pos={r.position} /></td>
-              {[["total", r.total], ["fpg", r.fpg], ["ppg", r.ppg]].map(([k, v]) => (
-                <td key={k} className={`px-3 py-1.5 text-right tabular-nums ${sortBy === k ? "font-semibold" : ""}`}
+              <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.gp}</td>
+              {[["total", r.total, ""], ["fpg", r.fpg, ""], ["ppg", r.ppg, "hidden sm:table-cell"]].map(([k, v, cls]) => (
+                <td key={k} className={`px-3 py-1.5 text-right tabular-nums ${cls} ${sortBy === k ? "font-semibold" : ""}`}
                   style={{ color: sortBy === k ? "var(--text-primary)" : "var(--text-secondary)" }}>{fmt1(v)}</td>
               ))}
               {["reb", "ast"].map((k) => (
-                <td key={k} className="px-2 py-1.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmt1((r.stats[k] || 0) / r.gp)}</td>
+                <td key={k} className="px-2 py-1.5 text-right tabular-nums hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>{fmt1((r.stats[k] || 0) / r.gp)}</td>
               ))}
             </tr>
           ))}

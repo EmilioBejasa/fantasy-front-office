@@ -374,7 +374,7 @@ test("checkInjuries: flags entries Sleeper or the scores disagree with", () => {
     { id: "missing", name: "Missing", team: "DET", position: "RB" },
   ];
   const list = [
-    { id: "healed", list: "IR", injury: "Ankle sprain", sinceWeek: 7 },
+    { id: "healed", list: "IR", injury: "Ankle sprain", sinceWeek: 1 },
     { id: "played", list: "IR", injury: "Knee", sinceWeek: 3 },
     { id: "late", list: "IR", injury: "Foot (fracture)", sinceWeek: 1 },
     { id: "fine", list: "IR", injury: "Torn ACL", sinceWeek: 2, seasonEnding: true },
@@ -385,11 +385,13 @@ test("checkInjuries: flags entries Sleeper or the scores disagree with", () => {
   };
   const sid = { healed: "1", played: "2", late: "3", fine: "4", missing: "5" };
   const result = checkInjuries({
-    list, pool, sleeper, scores: { 4: { played: 12.3 } }, week: 9,
+    list, pool, sleeper, scores: { 4: { played: 12.3, healed: 8.1 } }, week: 9,
     resolve: (id) => sid[id], returnWeek: (r) => (r.seasonEnding ? null : r.sinceWeek + 4),
   });
   const ids = (k) => plain(result[k].map((r) => r.id));
   assert.deepEqual(ids("activeAgain"), ["healed"]);
+  // A healthy player who has played since (and is past his return week) shows up once.
+  assert.match(result.activeAgain[0].detail, /scored in Wk 4/);
   assert.deepEqual(ids("scoredSince"), ["played"]);
   assert.deepEqual(ids("pastReturn"), ["late"]);
   assert.deepEqual(ids("notListed"), ["missing"]);

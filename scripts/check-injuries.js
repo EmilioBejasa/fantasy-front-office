@@ -36,12 +36,13 @@ function checkInjuries({ list, pool, sleeper, scores, week, resolve, returnWeek 
     const p = byId[r.id];
     if (!p) { out.unknown.push({ id: r.id, name: r.id, team: "", detail: "not in samplePlayers or the scores' extra players" }); continue; }
     const sp = sleeperOf(p);
-    if (!r.seasonEnding && sp && sp.status == null) {
-      out.activeAgain.push(row(p, "Sleeper shows him healthy (the site already hides him); remove the entry"));
-    }
     // Points, not just an entry: Sleeper sometimes logs a game with no stats (0) for an IR player.
     const playedSince = weeks.filter((w) => w >= r.sinceWeek && scores[w]?.[r.id] > 0);
-    if (playedSince.length) {
+    // Healthy on Sleeper says it all: one line (with any games since), not one per section.
+    if (!r.seasonEnding && sp && sp.status == null) {
+      const played = playedSince.length ? `, scored in Wk ${playedSince.join(", ")}` : "";
+      out.activeAgain.push(row(p, `Sleeper shows him healthy${played} (the site already hides him); remove the entry`));
+    } else if (playedSince.length) {
       out.scoredSince.push(row(p, `scored in Wk ${playedSince.join(", ")} but sinceWeek is ${r.sinceWeek}; fix the start week or remove`));
     } else if (!r.seasonEnding) {
       const back = returnWeek(r, p.team);

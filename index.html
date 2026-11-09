@@ -7021,6 +7021,24 @@ function useNbaWeek(data, season, week, enabled = true) {
   return res;
 }
 
+// Every fantasy week 1..count of a season at once (for the Season Grid), each
+// cached like useNbaWeek. A week that fails to load comes back null.
+function useNbaWeeks(data, season, count, enabled = true) {
+  const [res, setRes] = useState({ status: "idle", weeks: [] });
+  useEffect(() => {
+    if (!enabled || !season || !count || !window.SleeperNBA) return;
+    let cancelled = false;
+    const current = season === data.state?.season ? nbaWeeksFor(data, season) : Infinity;
+    setRes({ status: "loading", weeks: [] });
+    Promise.all(Array.from({ length: count }, (_, i) => i + 1).map((w) =>
+      nbaCached(`week-${season}-${w}`, w >= current ? 10 * 60 * 1000 : 24 * 60 * 60 * 1000,
+        () => window.SleeperNBA.fetchWeek(season, w)).catch(() => null)))
+      .then((weeks) => { if (!cancelled) setRes({ status: "live", weeks }); });
+    return () => { cancelled = true; };
+  }, [season, count, enabled]);
+  return res;
+}
+
 // Games per team for the current fantasy week and the next: { [team]: { left,
 // week, next } }, `left` being this week's games not yet played. In a weekly
 // points league, more games is more points, so this matters for pickups.
@@ -7110,6 +7128,112 @@ const NBA_STATUS_LABEL = { GTD: "Game-time decision", DTD: "Day-to-day", Sus: "S
 
 /* ---------- Scoreboard ---------- */
 
+const NBA_WEEKLY_VIEWS = [
+  { key: "week", label: "By Week" },
+  { key: "grid", label: "Season Grid" },
+  { key: "leaders", label: "Top scorers" },
+];
+// The grid lists this many players (by the chosen sort), so it stays quick.
+const NBA_GRID_ROWS = 300;
+
+// Season rows for the grid: each player's fantasy points per fantasy week
+// (null for a week without a game), season total, games and points per game.
+// weeks: useNbaWeeks' list (index 0 is Week 1).
+function nbaGridRows(weeks, { scoring, pos = "ALL", sortBy = "ttl" }) {
+  const byId = {};
+  weeks.forEach((players, wi) => {
+    for (const p of players || []) {
+      if (!nbaPosMatch(p, pos)) continue;
+      const r = byId[p.id] || (byId[p.id] = { id: p.id, name: p.name, position: p.position, team: p.team, cells: Array(weeks.length).fill(null), gp: 0, ttl: 0 });
+      const pts = p.games.reduce((sum, g) => sum + nbaPoints(g.stats, scoring), 0);
+      r.cells[wi] = { pts, gp: p.games.length };
+      r.gp += p.games.length;
+      r.ttl += pts;
+      r.team = p.team || r.team; // the latest week's team, after a trade
+    }
+  });
+  return Object.values(byId)
+    .map((r) => ({ ...r, avg: r.gp ? r.ttl / r.gp : null }))
+    .sort(sortBy === "avg" ? (a, b) => (b.avg ?? -1) - (a.avg ?? -1) || b.ttl - a.ttl : (a, b) => b.ttl - a.ttl);
+}
+
+// Like the football Season Grid: one row per player, a column per fantasy
+// week (that week's total, "–" with no game), and a running total.
+function NbaSeasonGrid({ data, season, pos, scoring }) {
+  const [sortBy, setSortBy] = useState("ttl");
+  const played = nbaWeeksFor(data, season);
+  const res = useNbaWeeks(data, season, played);
+  const rows = useMemo(() => nbaGridRows(res.weeks, { scoring, pos, sortBy }).slice(0, NBA_GRID_ROWS), [res.weeks, scoring, pos, sortBy]);
+  const columns = Array.from({ length: NBA_SEASON_WEEKS }, (_, i) => i + 1);
+  const th = "px-2 py-2 text-xs font-semibold sticky top-0";
+  const head = { color: "var(--text-muted)", background: "var(--surface-1)" };
+
+  return (
+    <>
+      <div className="flex">
+        <LabeledControl label="Sort">
+          <PillGroup options={[{ key: "ttl", label: "Total" }, { key: "avg", label: "Average" }]} value={sortBy} onChange={setSortBy} />
+        </LabeledControl>
+      </div>
+      {res.status !== "live" ? (
+        <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading {played} weeks from Sleeper…</p>
+      ) : (
+        <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "75vh" }}>
+          <table className="border-collapse text-sm" style={{ minWidth: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <th className={th + " text-right left-0 z-20"} style={head}>RK</th>
+                <th className="text-left px-3 py-2 text-xs font-semibold sticky top-0 z-20" style={{ ...head, left: "2.5rem" }}>Player</th>
+                <th className={th + " text-left z-10"} style={head}>Pos</th>
+                {columns.map((w) => (
+                  <th key={w} className={th + " text-right z-10"} style={{ ...head, minWidth: "2.75rem" }}>{w}</th>
+                ))}
+                <SortHeader label="TTL" active={sortBy === "ttl"} onClick={() => setSortBy("ttl")} />
+                <SortHeader label="AVG" active={sortBy === "avg"} onClick={() => setSortBy("avg")} />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={columns.length + 5} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>No games yet.</td></tr>
+              )}
+              {rows.map((r, i) => {
+                const rowBg = i % 2 === 1 ? "var(--page)" : "var(--surface-1)";
+                return (
+                  <tr key={r.id} className="border-b" style={{ borderColor: "var(--border)", background: rowBg }}>
+                    <td className="px-2 py-1.5 text-right tabular-nums sticky left-0" style={{ color: "var(--text-muted)", background: rowBg }}>{i + 1}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap sticky z-0" style={{ background: rowBg, left: "2.5rem" }}>
+                      <PlayerLink sport="nba" id={r.id}>{r.name}</PlayerLink>{" "}
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team}</span>
+                    </td>
+                    <td className="px-2 py-1.5"><PosBadge pos={r.position} /></td>
+                    {columns.map((w) => {
+                      const c = w <= r.cells.length ? r.cells[w - 1] : null;
+                      return (
+                        <td key={w} className="px-2 py-1.5 text-right tabular-nums"
+                          title={c ? "Week " + w + ": " + fmt1(c.pts) + " in " + c.gp + (c.gp === 1 ? " game" : " games") : undefined}
+                          style={{ color: c ? "var(--text-primary)" : "var(--text-muted)", fontSize: c ? undefined : "0.75rem" }}>
+                          {c ? fmt1(c.pts) : "–"}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "ttl" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "ttl" ? 600 : 400 }}>
+                      {fmt1(r.ttl)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums" title="Fantasy points per game"
+                      style={{ color: sortBy === "avg" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "avg" ? 600 : 400 }}>
+                      {fmt1(r.avg)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 function NbaScoreboard({ data, settings, setSettings }) {
   const seasons = [data.state.season, data.state.previous_season].filter((s) => nbaWeeksFor(data, s) > 0);
   const [pickedSeason, setSeason] = useState(null);
@@ -7150,16 +7274,19 @@ function NbaScoreboard({ data, settings, setSettings }) {
     <div className="flex flex-col gap-5">
       <NbaPageHeader title="Weekly Scores" lead={view === "week"
         ? "Every player's fantasy points for one fantasy week (Monday to Sunday), game by game."
-        : `The season's top fantasy scorers so far in ${settings.scoring === "espn" ? "ESPN" : "Standard"} scoring.`}>
+        : view === "grid"
+          ? `Every player's fantasy points by fantasy week, as a full Week 1-${NBA_SEASON_WEEKS} season grid with a running total.`
+          : `The season's top fantasy scorers so far in ${settings.scoring === "espn" ? "ESPN" : "Standard"} scoring.`}>
         Live from Sleeper's NBA stats. A fantasy week runs Monday to Sunday, so players can have anywhere from zero to
-        four or five games; the total is what counts in a weekly head-to-head points matchup. Top scorers ranks season
-        totals instead. {NBA_SCORING_NOTE[settings.scoring]}
+        four or five games; the total is what counts in a weekly head-to-head points matchup. The Season Grid shows each
+        week's total side by side (the top {NBA_GRID_ROWS} by the chosen sort), with AVG as points per game. Top scorers
+        ranks season totals instead. {NBA_SCORING_NOTE[settings.scoring]}
       </NbaPageHeader>
       <NbaSeasonNote data={data} />
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
         <LabeledControl label="View">
-          <PillGroup options={[{ key: "week", label: "Week" }, { key: "leaders", label: "Top scorers" }]} value={view} onChange={setView} />
+          <PillGroup options={NBA_WEEKLY_VIEWS} value={view} onChange={setView} />
         </LabeledControl>
         <LabeledControl label="Season">
           <PillGroup options={seasons.map((s) => ({ key: s, label: nbaSeasonLabel(s) }))} value={season} onChange={(s) => { setSeason(s); setWeek(null); }} />
@@ -7184,6 +7311,7 @@ function NbaScoreboard({ data, settings, setSettings }) {
       )}
 
       {view === "leaders" && <NbaTopScorers data={data} season={season} pos={pos} scoring={settings.scoring} />}
+      {view === "grid" && <NbaSeasonGrid data={data} season={season} pos={pos} scoring={settings.scoring} />}
       {view === "week" && <>
       {res.status === "loading" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading Week {week}…</p>}
       {res.status === "error" && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Couldn't load Week {week} ({res.message}).</p>}

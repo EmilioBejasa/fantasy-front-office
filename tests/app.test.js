@@ -582,3 +582,21 @@ test("leagueWaiverTips and bestAvailable follow the league", () => {
   assert.deepEqual(ids({ isDynasty: false }), ["2", "1"]);
   assert.deepEqual(ids({ isDynasty: true, skip: (r) => r.id === "1" }), ["2"]);
 });
+
+test("nbaGridRows: weekly totals, season total and points per game", () => {
+  const scoring = { pts: 1 };
+  const g = (pts) => ({ date: "2026-10-20", stats: { pts } });
+  const weeks = [
+    [{ id: "a", name: "A", position: "PG", team: "BOS", games: [g(10), g(20)] }, { id: "b", name: "B", position: "C", team: "NYK", games: [g(50)] }],
+    null,
+    [{ id: "a", name: "A", position: "PG", team: "LAL", games: [g(30)] }],
+  ];
+  const rows = plain(app.nbaGridRows(weeks, { scoring }));
+  assert.deepEqual(rows.map((r) => r.id), ["a", "b"]);
+  assert.equal(rows[0].ttl, 60);
+  assert.equal(rows[0].avg, 20);
+  assert.equal(rows[0].team, "LAL");
+  assert.deepEqual(rows[0].cells, [{ pts: 30, gp: 2 }, null, { pts: 30, gp: 1 }]);
+  assert.deepEqual(plain(app.nbaGridRows(weeks, { scoring, sortBy: "avg" })).map((r) => r.id), ["b", "a"]);
+  assert.deepEqual(plain(app.nbaGridRows(weeks, { scoring, pos: "C" })).map((r) => r.id), ["b"]);
+});

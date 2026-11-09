@@ -1549,14 +1549,14 @@ function SeasonGrid({ players, positionFilter, data }) {
               style={{ color: "var(--text-muted)", background: "var(--surface-1)", left: "2.5rem" }}>Player</th>
             <th className="text-left px-2 py-2 text-xs font-semibold sticky top-0 z-10"
               style={{ color: "var(--text-muted)", background: "var(--surface-1)" }}>Pos</th>
+            <SortHeader label="TTL" active={sortBy === "ttl"} onClick={() => setSortBy("ttl")} />
+            <SortHeader label="AVG" active={sortBy === "avg"} onClick={() => setSortBy("avg")} />
             {ALL_WEEKS.map((w) => (
               <th key={w} className="text-right px-2 py-2 text-xs font-semibold sticky top-0 z-10"
                 style={{ color: "var(--text-muted)", background: "var(--surface-1)", minWidth: "2.75rem" }}>
                 {w}
               </th>
             ))}
-            <SortHeader label="TTL" active={sortBy === "ttl"} onClick={() => setSortBy("ttl")} />
-            <SortHeader label="AVG" active={sortBy === "avg"} onClick={() => setSortBy("avg")} />
           </tr>
         </thead>
         <tbody>
@@ -1571,6 +1571,12 @@ function SeasonGrid({ players, positionFilter, data }) {
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>{p.team}</span>
                 </td>
                 <td className="px-2 py-1.5"><PosBadge pos={p.position} /></td>
+                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "ttl" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "ttl" ? 600 : 400 }}>
+                  {p.ttl.toFixed(1)}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "avg" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "avg" ? 600 : 400 }}>
+                  {p.avg === null ? "–" : p.avg.toFixed(1)}
+                </td>
                 {p.cells.map((c, wi) => (
                   <td key={wi} className="px-2 py-1.5 text-right tabular-nums"
                     style={{
@@ -1581,12 +1587,6 @@ function SeasonGrid({ players, positionFilter, data }) {
                     {c.type === "score" ? c.value.toFixed(1) : CELL_LABEL[c.type]}
                   </td>
                 ))}
-                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "ttl" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "ttl" ? 600 : 400 }}>
-                  {p.ttl.toFixed(1)}
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "avg" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "avg" ? 600 : 400 }}>
-                  {p.avg === null ? "–" : p.avg.toFixed(1)}
-                </td>
               </tr>
             );
           })}
@@ -7184,11 +7184,11 @@ function NbaSeasonGrid({ data, season, pos, scoring }) {
                 <th className={th + " text-right left-0 z-20"} style={head}>RK</th>
                 <th className="text-left px-3 py-2 text-xs font-semibold sticky top-0 z-20" style={{ ...head, left: "2.5rem" }}>Player</th>
                 <th className={th + " text-left z-10"} style={head}>Pos</th>
+                <SortHeader label="TTL" active={sortBy === "ttl"} onClick={() => setSortBy("ttl")} />
+                <SortHeader label="AVG" active={sortBy === "avg"} onClick={() => setSortBy("avg")} />
                 {columns.map((w) => (
                   <th key={w} className={th + " text-right z-10"} style={{ ...head, minWidth: "2.75rem" }}>{w}</th>
                 ))}
-                <SortHeader label="TTL" active={sortBy === "ttl"} onClick={() => setSortBy("ttl")} />
-                <SortHeader label="AVG" active={sortBy === "avg"} onClick={() => setSortBy("avg")} />
               </tr>
             </thead>
             <tbody>
@@ -7205,6 +7205,13 @@ function NbaSeasonGrid({ data, season, pos, scoring }) {
                       <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team}</span>
                     </td>
                     <td className="px-2 py-1.5"><PosBadge pos={r.position} /></td>
+                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "ttl" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "ttl" ? 600 : 400 }}>
+                      {fmt1(r.ttl)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums" title="Fantasy points per game"
+                      style={{ color: sortBy === "avg" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "avg" ? 600 : 400 }}>
+                      {fmt1(r.avg)}
+                    </td>
                     {columns.map((w) => {
                       const c = w <= r.cells.length ? r.cells[w - 1] : null;
                       return (
@@ -7215,13 +7222,6 @@ function NbaSeasonGrid({ data, season, pos, scoring }) {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: sortBy === "ttl" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "ttl" ? 600 : 400 }}>
-                      {fmt1(r.ttl)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" title="Fantasy points per game"
-                      style={{ color: sortBy === "avg" ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: sortBy === "avg" ? 600 : 400 }}>
-                      {fmt1(r.avg)}
-                    </td>
                   </tr>
                 );
               })}

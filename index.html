@@ -1975,8 +1975,9 @@ function InjuryTable({ rows, showReturn, tag = () => null }) {
 // follow the official injury reports (Wednesday to Friday); early in the week
 // they're carried over from the last game, which is why the latest game's
 // result is shown alongside.
-// Most serious first: the report is sorted in this order.
-const REPORT_STATUSES = ["Out", "Doubtful", "Questionable", "NA"];
+// Soonest expected back first: the report is sorted in this order. "Not active"
+// has no timeline, so it goes last.
+const REPORT_STATUSES = ["Questionable", "Doubtful", "Out", "NA"];
 const REPORT_STATUS_LABEL = { NA: "Not active" };
 const REPORT_STATUS_COLOR = {
   Questionable: "var(--series-amber)",
@@ -7714,10 +7715,22 @@ function nbaReturnEstimate(entry, today) {
   const stated = statedTimeline(entry.shortComment);
   if (NO_TIMETABLE.test(text)) return { kind: "none", stated };
   const date = details.returnDate;
-  if (!date) return stated ? { kind: "stated", stated } : null;
   const reported = entry.date ? dayNumber(entry.date) : dayNumber(today);
-  if (stated && dayNumber(date) < reported + stated.days - RETURN_CONFLICT_DAYS) return { kind: "stated", stated };
+  // A stated timeline's low end, in days from today (for sorting).
+  const statedOnly = () => ({ kind: "stated", stated, days: reported + stated.days - dayNumber(today) });
+  if (!date) return stated ? statedOnly() : null;
+  if (stated && dayNumber(date) < reported + stated.days - RETURN_CONFLICT_DAYS) return statedOnly();
   return { kind: "date", date, days: dayNumber(date) - dayNumber(today), stated };
+}
+
+// Sort key for the Injury Report, soonest back first: [group, days]. Dated and
+// stated returns come first by days (a passed estimate counts as today), then
+// players ESPN gives nothing for, then no timetable, then out for the season.
+function nbaReturnOrder(est) {
+  if (!est) return [1, 0];
+  if (est.kind === "season") return [3, 0];
+  if (est.kind === "none") return [2, 0];
+  return [0, Math.max(0, est.days)];
 }
 
 // Names differ by accents between the feeds (Porziņģis, Porzingis) and suffixes.
@@ -7793,18 +7806,22 @@ function NbaInjuries({ data, settings }) {
     [data, settings.scoring]
   );
 
+  // Soonest back first; ties go to the lighter designation, then the better player.
   const rows = useMemo(() => Object.entries(data.players)
     .filter(([, p]) => NBA_STATUSES.includes(p.status) && nbaPosMatch(p, pos))
-    .map(([id, p]) => ({ id, ...p, fpg: fpgById[id] ?? null }))
+    .map(([id, p]) => ({ id, ...p, fpg: fpgById[id] ?? null, est: returns[nbaNameKey(p.name)] }))
     .filter((r) => r.fpg >= 15)
-    .sort((a, b) => NBA_STATUSES.indexOf(a.status) - NBA_STATUSES.indexOf(b.status) || (b.fpg ?? 0) - (a.fpg ?? 0)),
-  [data.players, fpgById, pos]);
+    .map((r) => ({ ...r, order: nbaReturnOrder(r.est) }))
+    .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] ||
+      NBA_STATUSES.indexOf(b.status) - NBA_STATUSES.indexOf(a.status) || (b.fpg ?? 0) - (a.fpg ?? 0)),
+  [data.players, fpgById, pos, returns]);
 
   return (
     <div className="flex flex-col gap-5">
-      <NbaPageHeader title="Injury Report" lead="Fantasy-relevant NBA players with an injury designation right now, most serious first.">
-        Live from Sleeper's NBA player data (refreshed hourly). Out and IR are the most serious, then suspended,
-        doubtful and questionable; GTD is a game-time decision and DTD day-to-day. Fantasy-relevant means 15+ fantasy
+      <NbaPageHeader title="Injury Report" lead="Fantasy-relevant NBA players with an injury designation right now, soonest expected back first.">
+        Live from Sleeper's NBA player data (refreshed hourly). Sorted by the Expected back column: dated returns
+        soonest first, then players with no estimate, no timetable, and out for the season. GTD is a game-time
+        decision and DTD day-to-day. Fantasy-relevant means 15+ fantasy
         points per game ({settings.scoring === "espn" ? "ESPN" : "Standard"} scoring), the same blend the Trade Desk uses:
         this season, with last season mixed in until a player has {NBA_BLEND_GAMES} games. Expected back comes from ESPN's injury feed. The dates are ESPN's estimates, not team
         announcements, and many are rough, so a report saying there's no timetable, or a stated timeline well past the
@@ -7845,7 +7862,7 @@ function NbaInjuries({ data, settings }) {
                 <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>
                   {[r.injury, r.notes].filter(Boolean).join(" — ") || "–"}
                 </td>
-                <NbaReturnCell est={returns[nbaNameKey(r.name)]} />
+                <NbaReturnCell est={r.est} />
                 <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{fmt1(r.fpg)}</td>
               </tr>
             ))}

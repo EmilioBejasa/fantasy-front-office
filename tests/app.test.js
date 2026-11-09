@@ -522,6 +522,29 @@ test("nbaReturnEstimate: the report's words beat ESPN's date", () => {
   assert.equal(app.nbaReturnEstimate(noDate, today).kind, "none");
 });
 
+test("nbaReturnOrder: soonest back first, then no estimate, no timetable, season", () => {
+  const today = "2026-11-04";
+  const entry = (date, shortComment, abbr = "OUT") => ({
+    date: "2026-11-03T22:00Z", shortComment, longComment: "",
+    details: { returnDate: date, fantasyStatus: { abbreviation: abbr } },
+  });
+  const ests = {
+    season: app.nbaReturnEstimate(entry("2027-07-01", "Torn ACL.", "OFS"), today),
+    none: app.nbaReturnEstimate(entry("2026-11-08", "Carter is without a timetable for a return."), today),
+    months: app.nbaReturnEstimate(entry("2026-11-20", "Gueye will be re-evaluated in 3-to-4 months."), today),
+    soon: app.nbaReturnEstimate(entry("2026-11-06", "Landale is out with a hip strain."), today),
+    passed: app.nbaReturnEstimate(entry("2026-11-01", "Smith is day-to-day."), today),
+    unknown: undefined,
+  };
+  // The stated 3-month timeline counts from the report date, a day before today.
+  assert.equal(ests.months.days, 89);
+  const order = Object.keys(ests).sort((a, b) => {
+    const x = app.nbaReturnOrder(ests[a]), y = app.nbaReturnOrder(ests[b]);
+    return x[0] - y[0] || x[1] - y[1];
+  });
+  assert.deepEqual(order, ["passed", "soon", "months", "unknown", "none", "season"]);
+});
+
 test("statedTimeline: ranges and words, not other numbers", () => {
   assert.equal(app.statedTimeline("will miss at least 8-10 weeks").label, "Expected out 8-10 weeks");
   assert.equal(app.statedTimeline("will miss at least 8-10 weeks").days, 56);

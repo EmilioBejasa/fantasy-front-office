@@ -60,7 +60,7 @@ async function get(url) {
   spent++;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(API + url);
+      const res = await fetch(API + url, { signal: AbortSignal.timeout(15000) });
       if (res.status === 429) { await sleep(5000); continue; }
       if (!res.ok) return null;
       return await res.json();
@@ -69,15 +69,16 @@ async function get(url) {
   return null;
 }
 
-// Runs fn over items CONCURRENCY at a time, spacing each worker's requests.
+// Runs fn over items CONCURRENCY at a time, spacing each worker's requests
+// (an item that made none, such as one skipped, doesn't wait).
 async function pool(items, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
     while (i < items.length && spent < BUDGET) {
       const item = items[i++];
-      const t = Date.now();
+      const t = Date.now(), before = spent;
       await fn(item);
-      const left = MIN_GAP_MS - (Date.now() - t);
+      const left = MIN_GAP_MS * (spent - before) - (Date.now() - t);
       if (left > 0) await sleep(left);
     }
   }));

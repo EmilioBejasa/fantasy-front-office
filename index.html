@@ -9964,6 +9964,17 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
   const myLeague = React.useContext(MyLeagueContext);
   const weeks = playedWeeks(scores.scores);
   const latestWeek = weeks[weeks.length - 1];
+  // The badge follows the sport switch. Basketball's week comes from Sleeper's
+  // NBA state alone (shared cache with useNbaData), not the full NBA data.
+  const [nbaWeek, setNbaWeek] = useState(null);
+  useEffect(() => {
+    if (sport !== "nba" || !window.SleeperNBA) return;
+    let cancelled = false;
+    nbaCached("state", 10 * 60 * 1000, window.SleeperNBA.fetchState)
+      .then((st) => { if (!cancelled) setNbaWeek(st?.season_type === "regular" && st.week > 0 ? st.week : null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sport]);
   const players = dynasty.rows.filter((r) => r.position !== "PICK");
   // Biggest 30-day risers among players worth a real roster spot.
   const risers = players.filter((r) => r.value >= 1500 && r.trend30 > 0).sort((a, b) => b.trend30 - a.trend30).slice(0, 5);
@@ -9973,7 +9984,9 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
       <section className="hero-glow -mx-4 px-4 pt-10 pb-4 sm:pt-16 text-center flex flex-col items-center gap-5">
         <span className="text-xs font-semibold uppercase tracking-wider rounded-md border px-3 py-1"
           style={{ borderColor: "var(--sport)", color: "var(--sport)", background: "var(--surface-1)" }}>
-          {latestWeek ? `NFL Week ${latestWeek} · ` : ""}Football &amp; Basketball
+          {sport === "nba"
+            ? `${nbaWeek ? `NBA Week ${nbaWeek} · ` : ""}Basketball`
+            : `${latestWeek ? `NFL Week ${latestWeek} · ` : ""}Football`}
         </span>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight max-w-3xl" style={{ color: "var(--text-primary)", lineHeight: 1.1 }}>
           Run your fantasy team like a <span className="text-gradient">GM</span>

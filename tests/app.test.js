@@ -640,3 +640,24 @@ test("nbaTradeRows: a retired or unsigned player with only last season's stats i
   // Without the player list (it failed to load), nobody is dropped.
   assert.equal(app.nbaTradeRows({ ...data, players: {} }, { pts: 1 }).rows.length, 3);
 });
+
+test("nbaMarketRows and nbaMarketView: ranks, picks, gone players, filters and sorts", () => {
+  const market = {
+    season: "2026",
+    formats: { dynasty: { a: [9999, 9000, 20, 1], b: [7000, 8000, 2, 2], "pick-1-1": [3000, 3000, 6, 3], gone: [5000, 5000, 9, 2] } },
+    trends: { dynasty: { b: [-100, -400], a: [50, 300] } },
+  };
+  const players = { a: { name: "Alpha", position: "C", positions: ["C", "PF"], team: "SAS", age: 22 }, b: { name: "Beta", position: "PG", team: "OKC", age: 28 } };
+  const rows = app.nbaMarketRows(market, "dynasty", players);
+  assert.equal(rows.map((r) => r.id).join(), "a,b,pick-1-1");
+  assert.equal(rows[2].name, "2027 1st");
+  assert.equal(rows[1].thin, true);
+  assert.equal(rows[1].gap, -1000);
+  assert.equal(rows[0].d30, 300);
+  const ids = (opts) => app.nbaMarketView(rows, opts).map((r) => r.id).join();
+  assert.equal(ids({ pos: "PF" }), "a");
+  assert.equal(ids({ pos: "PICK" }), "pick-1-1");
+  assert.equal(ids({ query: "bet" }), "b");
+  assert.equal(ids({ sortBy: "d30" }), "a,pick-1-1,b");
+  assert.equal(app.nbaMarketRows(null, "dynasty", players).length, 0);
+});

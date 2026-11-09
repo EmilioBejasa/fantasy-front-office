@@ -13,9 +13,10 @@ leagues: **Player Values** (live trade values for every player and rookie
 pick, as a mock draft board or a searchable list), a **Trade Calculator** (starting from this month's biggest
 risers and fallers), and a **2027 Class** preview of next year's rookies.
 
-There's also a **basketball** side for season-long (redraft) points
-leagues, with seven rooms: Scoreboard, Waiver Desk, Training Room, Boardroom,
-Big Board, War Room and Trade Desk. See "Basketball" below. A Football | Basketball switch in
+There's also a **basketball** side for points leagues, with eight rooms:
+Scoreboard, Waiver Desk, Training Room, Boardroom, Big Board, War Room, Trade
+Desk and Trading Floor (a KTC-style dynasty and redraft trade market built from
+real Sleeper trades). See "Basketball" below. A Football | Basketball switch in
 the header moves between the two sports.
 
 ## Running it
@@ -908,6 +909,49 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
     counts as (15 − games played) games and fades out after 15 games
   - availability is games played ÷ team games, kept between 50% and 100%
   - rookies have no value until they've played
+
+  A **Values** switch swaps in the Trading Floor's dynasty or redraft market
+  values instead (dynasty adds rookie picks).
+- **Trading Floor** (`NbaMarket`, `#/nba/market`): see "Trade Market" below.
+
+### Trade Market (Trading Floor)
+
+No outside site publishes basketball trade values, so the market is built from
+real trades, like KeepTradeCut's tradesourced values:
+
+- **Crawl.** `scripts/refresh-nba-market.js`, run by the Refresh NBA market
+  Action daily at 11:30 UTC, walks public Sleeper basketball leagues (league →
+  its managers → their other leagues, starting from the site owner's account)
+  and reads each league's completed trades. It spends at most 3,500 requests a
+  run at about five a second. Its state lives in `cache/` (committed, not
+  deployed): `nba-market-crawl.json` (leagues found and how far each has been
+  read, plus users still to look up) and `nba-trades.json` (a year of trades).
+  `--backfill` also reads every league's previous season and rebuilds the weekly
+  history from those trades.
+- **Fit** (`scripts/lib/nba-market.js`). Each trade compares two sides. A side
+  is worth `(Σ v^1.4)^(1/1.4)`, so one star beats several role players with
+  the same total. The fit finds the values that make the trades look fairest:
+  a Huber loss (one strange trade can only pull so hard), recency weights
+  (half-life 45 days dynasty, 21 redraft), and a pull toward each asset's
+  **model value** so rarely traded players stay near it. Trades with an empty
+  side or more than six assets, three-team trades, trades over 4× lopsided on
+  the model, and anything past 12 trades per league per 30 days are left out.
+- **Model value.** Points above replacement (Standard scoring, this season
+  blended with last; rookies blended toward 22 FPG) × availability. Redraft is
+  × games left. Dynasty sums four seasons with an age curve (+6%/yr through 24,
+  flat to 29, −5%/yr to 32, −10% after), each later season × 0.8. Picks are
+  keyed by drafts away and round (`pick-1-1` is next year's 1st) and start at a
+  set player rank. These are the site's own estimates.
+- **Formats.** Dynasty uses dynasty leagues plus keeper leagues at half weight;
+  redraft uses redraft leagues. A format with under 300 usable trades shows
+  model values with a "still collecting" note.
+- **Output.** `data/nba-market.js` (values 0-9,999 with the top asset at 9,999,
+  model value, effective trade count, tier, 7- and 30-day change),
+  `data/nba-market-history.js` (weekly, for profiles) and
+  `data/nba-trades-recent.js` (the latest 150 trades). The page shows rankings
+  with tiers, filters and sorts, risers and fallers, the trade count (*thin*
+  under 5), market vs model, and recent trades at today's values judged with
+  `evaluateTrade`. Player profiles get a market box (`NbaMarketProfile`).
 
 ### Expected back (Training Room)
 

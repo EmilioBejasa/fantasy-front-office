@@ -165,3 +165,74 @@ test("prospects-2027.js has every CLASS_2027 espnId", () => {
   require("vm").runInNewContext(fs.readFileSync(path.join(ROOT, "data/prospects-2027.js"), "utf8"), sandbox);
   for (const id of ids) assert.ok(sandbox.window.PROSPECTS_2027.players[id], `no college stats for espnId ${id}`);
 });
+
+const market = require("../scripts/lib/nba-market");
+
+test("nba-market parseTrade: who got what, picks by drafts away, redraft drops picks", () => {
+  const tx = {
+    type: "trade", status: "complete", transaction_id: "9", status_updated: 1000, roster_ids: [2, 13],
+    adds: { 4001: 2, 4002: 13, 4003: 13 },
+    draft_picks: [
+      { season: "2027", round: 1, roster_id: 13, owner_id: 2, previous_owner_id: 13 },
+      { season: "2026", round: 2, roster_id: 2, owner_id: 13, previous_owner_id: 2 }, // already made
+    ],
+  };
+  const t = market.parseTrade(tx, { id: "L", type: 2, size: 12, season: "2026" });
+  assert.equal(t.format, "dynasty");
+  assert.deepEqual(t.sides, [["4001", "pick-1-1"], ["4002", "4003"]]);
+  assert.equal(market.pickInfo("pick-1-1", "2026").label, "2027 1st");
+  const r = market.parseTrade(tx, { id: "L", type: 0, size: 12, season: "2026" });
+  assert.deepEqual(r.sides, [["4001"], ["4002", "4003"]]);
+  assert.equal(market.parseTrade({ ...tx, status: "failed" }, { id: "L", type: 2, season: "2026" }), null);
+  assert.equal(market.parseTrade({ ...tx, roster_ids: [1, 2, 3] }, { id: "L", type: 2, season: "2026" }), null);
+});
+
+test("nba-market cleanTrades: drops lopsided, oversized, unknown and past a league's cap", () => {
+  const prior = { a: 100, b: 90, c: 10, d: 5 };
+  const t = (id, sides, league = "L", ts = 1e12) => ({ id, ts, sides, league, weight: 1 });
+  const kept = market.cleanTrades([
+    t("fair", [["a"], ["b"]]),
+    t("lopsided", [["a"], ["d"]]),
+    t("unknown", [["a"], ["zz"]]),
+    t("big", [["a"], ["b", "c", "d", "c", "d", "c", "d"]]),
+  ], prior).map((x) => x.id);
+  assert.deepEqual(kept, ["fair"]);
+  const many = Array.from({ length: market.LEAGUE_CAP + 5 }, (_, i) => t(`t${i}`, [["a"], ["b"]], "busy", 1e12 + i));
+  assert.equal(market.cleanTrades(many, prior).length, market.LEAGUE_CAP);
+});
+
+test("nba-market fitValues: trades move values, thin assets stay near the model", () => {
+  // The model says A and B are even, but managers keep paying B + C for A.
+  const prior = { A: 100, B: 100, C: 40, D: 50 };
+  const now = Date.now();
+  const trades = Array.from({ length: 30 }, (_, i) => ({ id: String(i), ts: now - i * 86400000, weight: 1, league: String(i), sides: [["A"], ["B", "C"]] }));
+  const fit = market.fitValues(trades, prior, { now, halfLife: 30 });
+  assert.ok(fit.values.A > fit.values.B * 1.15, "A rises above B");
+  assert.ok(Math.abs(fit.values.D - 50) < 0.5, "untraded D keeps its model value");
+  // One stud beats two half-as-good players (the consolidation premium).
+  assert.ok(market.sideValue({ x: 100, y: 50, z: 50 }, ["y", "z"]) < 100);
+  // A single strange trade barely moves anything.
+  const one = market.fitValues([{ id: "x", ts: now, weight: 1, league: "q", sides: [["D"], ["A"]] }], prior, { now, halfLife: 30 });
+  assert.ok(one.values.A > one.values.D, "one trade doesn't flip A and D");
+});
+
+test("nba-market scaleValues and tiers: top is 9999, tiers break at big drops", () => {
+  const rows = market.scaleValues({ values: { a: 50, b: 49, c: 30 }, n: { a: 3, b: 0, c: 1 } }, { a: 40, b: 49, c: 30 }, ["a", "b", "c"]);
+  assert.deepEqual(rows.map((r) => [r.id, r.v]), [["a", 9999], ["b", 9799], ["c", 5999]]);
+  assert.deepEqual(market.tiers(rows), [1, 1, 2]);
+});
+
+test("nba-market ageFactor and priorValues: young players climb in dynasty", () => {
+  assert.ok(market.ageFactor(21, 3) > 1 && market.ageFactor(34, 3) < 0.8);
+  const line = (id, name, gp, pts) => ({ id, name, position: "PG", team: "SAC", gp, stats: { pts } });
+  const snap = {
+    state: { season: "2026", previous_season: "2025" },
+    "season-2026": [line("young", "Young", 10, 300), line("old", "Old", 10, 300)],
+    "season-2025": [line("young", "Young", 70, 2100), line("old", "Old", 70, 2100)],
+    players: { young: { name: "Young", age: 21, team: "SAC" }, old: { name: "Old", age: 34, team: "SAC" } },
+  };
+  const d = market.priorValues(snap, "dynasty"), r = market.priorValues(snap, "redraft");
+  assert.ok(d.young > d.old * 1.3);
+  assert.equal(Math.round(r.young), Math.round(r.old));
+  assert.ok(d["pick-1-1"] > 0 && r["pick-1-1"] == null);
+});

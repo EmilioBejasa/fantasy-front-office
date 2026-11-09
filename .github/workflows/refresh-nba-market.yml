@@ -1,0 +1,47 @@
+# Crawls public Sleeper basketball leagues for completed trades and refits
+# the Trade Market's dynasty and redraft values (scripts/refresh-nba-market.js),
+# then commits the values, history and recent-trades feed (data/) and the
+# crawler's state (cache/) if anything changed.
+name: Refresh NBA market
+
+on:
+  schedule:
+    # 11:30 UTC daily, after Refresh NBA has updated the snapshot the model
+    # values are built from.
+    - cron: "30 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shares a group with the other refresh jobs so they never push over each other.
+concurrency:
+  group: refresh-index-html
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Crawl Sleeper trades and refit market values
+        run: node scripts/refresh-nba-market.js
+
+      - name: Commit if changed
+        run: |
+          git add data/nba-market.js data/nba-market-history.js data/nba-trades-recent.js cache/
+          if git diff --cached --quiet; then
+            echo "No market changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh NBA trade market ($(date -u +%Y-%m-%d))"
+          git pull --rebase
+          git push

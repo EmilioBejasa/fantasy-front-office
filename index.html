@@ -1329,7 +1329,7 @@ function LivePicks({ scores, sleeperPlayers, picks, bidOf }) {
           Live picks{picks.week ? ` for Week ${picks.week}` : ""} <span className="font-normal" style={{ color: "var(--text-muted)" }}>· live</span>
         </h3>
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {connected ? "players available in your league" : "leaving out this season's top scorers and top 150 by trade value · connect your league above for exact availability"}
+          {connected ? "players available in this league" : "leaving out this season's top scorers and top 150 by trade value · open your league in My Leagues for exact availability"}
         </span>
       </div>
       {!ready ? (
@@ -1346,12 +1346,49 @@ function LivePicks({ scores, sleeperPlayers, picks, bidOf }) {
   );
 }
 
+// The Waiver Desk: league-neutral lists (no league filter or FAAB). Each
+// league's own page has the version filtered to who's still available there.
 function WaiverTargets({ scores, sleeperPlayers, values }) {
+  const updated = new Date(WAIVER_TARGETS_UPDATED_ON + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return (
+    <div className="flex flex-col gap-5">
+      <header>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Waiver Wire Targets</h2>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+          Current pickup targets — priority reflects how urgently they're worth a roster spot, not raw talent. To see only
+          who's still available in your league, with advice for its format, open it in{" "}
+          <a href={LEAGUES_HASH} className="font-medium" style={{ color: "var(--sport)" }}>My Leagues</a>.
+        </p>
+        <AboutData>
+          The live picks are worked out on every visit from Sleeper's weekly stats and injury designations. The
+          hand-picked list is curated (last updated {updated}) for one week at a time: update
+          the <code>WAIVER_TARGETS</code> array in <code>index.html</code> wholesale as real in-season news comes in.
+          Once it's a week behind, the live picks move to the top. The Trending panel pulls live add/drop activity
+          straight from Sleeper's API. FAAB bids here are a share of the budget; a league's own page bids from what
+          that league has paid.
+        </AboutData>
+      </header>
+
+      <LeagueScope sport="nfl" league={null}>
+        <SleeperTrending />
+        <NflWaiverBoard scores={scores} sleeperPlayers={sleeperPlayers} values={values} />
+      </LeagueScope>
+    </div>
+  );
+}
+
+// The FAAB summary, hand-picked targets and live picks, for whichever league
+// the surrounding MyLeagueContext holds (none on the Waiver Desk). `adjust`
+// re-tiers and tags each hand-picked target for that league (leagueWaiverCall).
+function NflWaiverBoard({ scores, sleeperPlayers, values, adjust }) {
   // Sorted by urgency (Must Add first, Deep League last) — WAIVER_PRIORITIES
   // is already in that order, so this just needs each entry's index in it.
   const sortedTargets = useMemo(
-    () => [...WAIVER_TARGETS].sort((a, b) => WAIVER_PRIORITIES.indexOf(a.priority) - WAIVER_PRIORITIES.indexOf(b.priority)),
-    []
+    () => (adjust ? WAIVER_TARGETS.map(adjust) : WAIVER_TARGETS)
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => WAIVER_PRIORITIES.indexOf(a.t.priority) - WAIVER_PRIORITIES.indexOf(b.t.priority) || a.i - b.i)
+      .map(({ t }) => t),
+    [adjust]
   );
   const resolve = React.useContext(NflIdContext);
   const { ownerOf, hideRostered, connected } = useRostered("nfl");
@@ -1381,6 +1418,13 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
   const week = waiverWeek(scores);
   const stale = week && week > WAIVER_TARGETS_WEEK;
   const updated = new Date(WAIVER_TARGETS_UPDATED_ON + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const tagLine = (t) => t.tags?.length ? (
+    <span className="flex flex-wrap gap-1">
+      {t.tags.map((tag) => (
+        <span key={tag} className="rounded-full px-1.5 py-px text-[11px] font-medium" style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}>{tag}</span>
+      ))}
+    </span>
+  ) : null;
 
   const handPicked = sortedTargets.length === 0 ? (
     <div className="rounded-lg border p-8 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
@@ -1388,7 +1432,8 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
       is shown in its place.
     </div>
   ) : (
-    <PickTable rows={shownTargets} ownerOf={ownerOfTarget} bidOf={bidOf} emptyText="Everyone on this list is already rostered in your league." />
+    <PickTable rows={shownTargets} ownerOf={ownerOfTarget} bidOf={bidOf} extra={adjust ? tagLine : undefined}
+      emptyText="Everyone on this list is already rostered in this league." />
   );
   const handTitle = (
     <>
@@ -1399,27 +1444,7 @@ function WaiverTargets({ scores, sleeperPlayers, values }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <header>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Waiver Wire Targets</h2>
-        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          Current pickup targets — priority reflects how urgently they're worth a roster spot, not raw talent.
-        </p>
-        <AboutData>
-          The live picks are worked out on every visit from Sleeper's weekly stats and injury designations. The
-          hand-picked list is curated (last updated {WAIVER_TARGETS_UPDATED_ON}) for one week at a time: update
-          the <code>WAIVER_TARGETS</code> array in <code>index.html</code> wholesale as real in-season news comes in.
-          Once it's a week behind, the live picks move to the top. The Trending panel pulls live add/drop activity
-          straight from Sleeper's API. FAAB bids come from each player's priority: in a connected FAAB league, from the bids
-          your league has won once it has {FAAB_MIN_HISTORY}, adjusted for how much money the league has left and capped at
-          what you have. With no league connected they're a share of the budget. They're a starting point, not a guarantee.
-        </AboutData>
-      </header>
-
-      <MyLeagueBar sport="nfl" />
-
       {faab.market && <FaabSummary market={faab.market} />}
-
-      <SleeperTrending />
 
       {stale ? (
         <>
@@ -2153,7 +2178,7 @@ function InjuredReserve({ players, reportPlayers, data, sleeperPlayers = {} }) {
         </div>
         {!connected && (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Connect your Sleeper league on the <a href="#/waivers" className="underline">Waiver Wire</a> to see your players first.
+            Open your Sleeper league in <a href="#/leagues" className="underline">My Leagues</a> and make it your league to see your players first.
           </p>
         )}
       </div>
@@ -5492,11 +5517,117 @@ function LeaguePulse({ txs, teams, byId, pickRow, ctx, streakOf, hasRecord, slee
 
 // Which sections come first on a league page, by the shown team's situation.
 const LEAGUE_SECTION_ORDER = {
-  Contender: ["matchup", "standings", "playoffs", "team", "pulse", "power", "blocks", "settings"],
-  Rebuilding: ["blocks", "team", "pulse", "standings", "matchup", "playoffs", "power", "settings"],
-  offseason: ["blocks", "team", "pulse", "power", "settings", "matchup", "standings", "playoffs"],
-  default: ["team", "matchup", "standings", "playoffs", "pulse", "blocks", "power", "settings"],
+  Contender: ["matchup", "standings", "playoffs", "team", "waivers", "pulse", "power", "blocks", "settings"],
+  Rebuilding: ["blocks", "team", "waivers", "pulse", "standings", "matchup", "playoffs", "power", "settings"],
+  offseason: ["blocks", "team", "pulse", "power", "settings", "matchup", "standings", "playoffs", "waivers"],
+  default: ["team", "waivers", "matchup", "standings", "playoffs", "pulse", "blocks", "power", "settings"],
 };
+
+/* ---------------- a league's waiver wire ---------------- */
+// In dynasty, a waiver target is worth keeping past this week if his dynasty
+// value ranks inside this many players per team (about a full roster's worth).
+const WAIVER_KEEPER_DEPTH = 15;
+// Bottom third of the league at a position counts as a weak room.
+const WEAK_ROOM_SHARE = 2 / 3;
+
+// How the league's format changes the waiver advice, as short tips.
+function leagueWaiverTips(league, { isDynasty }) {
+  const s = settingsFromLeague(league);
+  const teams = league.total_rosters || 12;
+  const tips = [isDynasty
+    ? "Dynasty: rosters run deep and the wire is thin, so favor young players with a path to a real role over one-week fill-ins, and cut a rental once its week is done. Targets whose dynasty value says they're worth keeping move up a tier."
+    : "Redraft: only this season counts, so chase this week's role and matchup, and stream quarterbacks and tight ends freely."];
+  if (league.settings?.best_ball) tips.push("Best ball: lineups set themselves, so a boom-or-bust player helps more than a steady low floor.");
+  if (s.qb === "sf") tips.push("Superflex: starting quarterbacks rarely reach waivers, so any QB with a starting job moves up a tier.");
+  if (s.tep) tips.push(`TE premium (+${s.tep} per catch): a tight end who's getting targets is worth more here, so tight ends move up a tier.`);
+  if (teams >= 14) tips.push(`${teams} teams: the wire is shallow, so Deep League picks are worth a roster spot here.`);
+  else if (teams <= 10) tips.push(`${teams} teams: the wire is deep, so skip Deep League picks unless one fills a hole.`);
+  tips.push(league.settings?.waiver_type === 2
+    ? "FAAB: bids come from what this league has paid for players so far."
+    : "Waiver priority: don't spend a top claim on a streamer; save it for a Must Add and grab streamers once claims clear.");
+  return tips;
+}
+
+// One hand-picked target, re-tiered for this league: up a tier for a QB in
+// superflex, a TE with TE premium, and (dynasty) a player worth keeping; tags
+// say why, plus "Your RB room: 11th of 12" when he'd fill a weak room.
+// ctx: { isDynasty, superflex, tep, teams, keeper(t) -> bool, roomRank(pos) -> rank|null }
+function leagueWaiverCall(t, ctx) {
+  let tier = Math.max(0, WAIVER_PRIORITIES.indexOf(t.priority));
+  const tags = [];
+  const up = (why) => { tier = Math.max(0, tier - 1); tags.push(why); };
+  if (ctx.superflex && t.position === "QB") up("Superflex QB");
+  if (ctx.tep && t.position === "TE") up("TE premium");
+  if (ctx.isDynasty) {
+    if (ctx.keeper(t)) up("Dynasty keeper");
+    else if (["Streamer", "Deep League"].includes(t.priority)) tags.push("Short-term only");
+  }
+  const rank = ctx.roomRank(t.position);
+  if (rank && ctx.teams > 1 && rank > ctx.teams * WEAK_ROOM_SHARE) tags.push(`Your ${t.position} room: ${ordinal(rank)} of ${ctx.teams}`);
+  return { ...t, priority: WAIVER_PRIORITIES[tier], tags };
+}
+
+// The best players nobody in the league has, by this league's values
+// (dynasty value in dynasty, this season's value in redraft), leaving out
+// anyone done for the season.
+function bestAvailable(rows, rosteredBy, { isDynasty, skip = () => false, limit = 8 }) {
+  const worth = (r) => (isDynasty ? r.value : r.redraftValue ?? r.value) || 0;
+  return rows.filter((r) => r.position !== "PICK" && !rosteredBy[r.id] && !skip(r) && worth(r) > 0)
+    .sort((a, b) => worth(b) - worth(a)).slice(0, limit);
+}
+
+// A league page's waiver wire: format tips, the hand-picked list re-tiered
+// for the league (with FAAB bids from its own history), the live picks and
+// the best available players by value, all limited to who's still available.
+function LeagueWaivers({ raw, team, teams, ranks, isDynasty, values, scores, sleeperPlayers, outForYear }) {
+  const resolve = React.useContext(NflIdContext);
+  const s = settingsFromLeague(raw.league);
+  const scope = useMemo(() => {
+    const ownerId = team.ownerIds?.[0] || null;
+    return { leagueId: raw.league.league_id, name: raw.league.name, userId: ownerId,
+      ...rosterIndex(raw.rosters, raw.users, ownerId, team.rosterId) };
+  }, [raw, team.rosterId]);
+  const keepers = useMemo(() => new Set(values.rows.filter((r) => r.position !== "PICK")
+    .sort((a, b) => b.value - a.value).slice(0, WAIVER_KEEPER_DEPTH * (teams.length || 12)).map((r) => String(r.id))), [values.rows, teams.length]);
+  const adjust = useMemo(() => (t) => leagueWaiverCall(t, {
+    isDynasty, superflex: s.qb === "sf", tep: s.tep, teams: teams.length,
+    keeper: (x) => keepers.has(String(resolve(x.id, x.name, x.position))),
+    roomRank: (pos) => ranks[pos]?.[team.rosterId] ?? null,
+  }), [isDynasty, s.qb, s.tep, teams.length, keepers, resolve, ranks, team.rosterId]);
+  const best = useMemo(() => bestAvailable(values.rows, scope.rosteredBy, { isDynasty, skip: (r) => outForYear.has(String(r.id)) }),
+    [values.rows, scope.rosteredBy, isDynasty, outForYear]);
+  const tips = leagueWaiverTips(raw.league, { isDynasty });
+
+  return (
+    <ProfileSection title="Waiver wire" aside={`Who's still available here · advice for ${isDynasty ? "dynasty" : "redraft"}`}>
+      <ul className="flex flex-col gap-1 text-sm list-disc pl-5" style={{ color: "var(--text-secondary)" }}>
+        {tips.map((tip) => <li key={tip}>{tip}</li>)}
+      </ul>
+      <LeagueScope sport="nfl" league={scope}>
+        <NflWaiverBoard scores={scores} sleeperPlayers={sleeperPlayers} values={values.rows} adjust={adjust} />
+      </LeagueScope>
+      {best.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            {isDynasty ? "Best available by dynasty value" : "Best available by this season's value"}
+            <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}> · {isDynasty ? "stashes worth a bench spot" : "the top of the wire on paper"}</span>
+          </h3>
+          <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {best.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="min-w-0 truncate">
+                  <PosBadge pos={r.position} /> <PlayerLink id={r.id} name={r.name} pos={r.position}>{r.name}</PlayerLink>{" "}
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team || "FA"}{isDynasty && r.age ? ` · ${Math.floor(r.age)}` : ""}</span>
+                </span>
+                <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmtValue(Math.round(isDynasty ? r.value : r.redraftValue ?? r.value))}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </ProfileSection>
+  );
+}
 
 function MyLeagues({ settings, setSettings, navigate, scores }) {
   const [input, setInput] = useState(() => { try { return localStorage.getItem(SLEEPER_USER_KEY) || ""; } catch (e) { return ""; } });
@@ -5710,7 +5841,8 @@ function MyLeagues({ settings, setSettings, navigate, scores }) {
           <header>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>My Leagues</h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-              Load your Sleeper leagues, then open one to see where your team stands and who to trade for, valued with that
+              Look up any Sleeper league, dynasty or redraft, by your username or the league ID. Open one to see where your
+              team stands, the waiver pickups still available there and who to trade for, with advice that follows that
               league's own format, size, scoring, TE premium and starting lineup.
             </p>
           </header>
@@ -5766,7 +5898,7 @@ function MyLeagues({ settings, setSettings, navigate, scores }) {
             </div>
             <div className="flex items-end gap-3 flex-wrap">
               <button type="button" className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
-                title="Star your players across the site, filter the Waiver Desk to free agents here, and link this league from the home page"
+                title="Star your players across the site and link this league from the home page"
                 onClick={() => my.save("nfl", isMyLeague(raw.league.league_id) ? null : {
                   leagueId: raw.league.league_id, name: raw.league.name, userId: user?.user_id || my.nfl?.userId || null,
                   availableOnly: my.nfl?.availableOnly ?? true,
@@ -5972,6 +6104,13 @@ function MyLeagues({ settings, setSettings, navigate, scores }) {
 
 
           </section>
+
+          {!offseason && (
+            <div id="league-waivers" style={{ order: orderOf("waivers"), scrollMarginTop: "5rem" }}>
+              <LeagueWaivers raw={raw} team={team} teams={teams} ranks={ranks} isDynasty={isDynasty} values={values}
+                scores={scores} sleeperPlayers={sleeperPlayers} outForYear={outForYear} />
+            </div>
+          )}
 
           {showStandings && (
             <div className="empty:hidden" style={{ order: orderOf("matchup") }}>
@@ -7328,7 +7467,11 @@ function NbaPickups({ games, ownerOf, hideRostered }) {
   );
 }
 
-function NbaWaivers({ data, settings }) {
+// League-neutral, like the football Waiver Desk; a league's page has the
+// pickups still available there.
+const NbaWaivers = (props) => <LeagueScope sport="nba" league={null}><NbaWaiversBody {...props} /></LeagueScope>;
+
+function NbaWaiversBody({ data, settings }) {
   const [direction, setDirection] = useState("add");
   const [trend, setTrend] = useState({ status: "loading", rows: [] });
   const season = data.activeSeason;
@@ -7391,7 +7534,10 @@ function NbaWaivers({ data, settings }) {
         them, or with last season while he has fewer than 3 earlier games.
       </NbaPageHeader>
 
-      <MyLeagueBar sport="nba" />
+      <p className="text-sm -mt-2" style={{ color: "var(--text-secondary)" }}>
+        To see only who's still available in your league, open it in{" "}
+        <a href={NBA_LEAGUES_HASH} className="font-medium" style={{ color: "var(--sport)" }}>My Leagues</a>.
+      </p>
 
       <NbaPickups games={games} ownerOf={ownerOf} hideRostered={hideRostered} />
 
@@ -7761,8 +7907,7 @@ function NbaTrade({ data, settings, setSettings }) {
 // availability the Trade Analyzer uses; 80% for anyone with no NBA games).
 // Only players on an NBA roster are kept, which also keeps the cache small.
 /* ---------- Boardroom (your Sleeper league) ---------- */
-// #/nba/leagues is your connected league (the same "Your league" the Waiver
-// Desk uses); #/nba/leagues/<id> opens any league by ID. Everyone is valued in
+// #/nba/leagues is your saved league ("Make this my league"); #/nba/leagues/<id> opens any league by ID. Everyone is valued in
 // the league's own scoring (its scoring_settings as weights on the box-score
 // stats, so bonuses like double-doubles count when the league scores them)
 // with the Trade Desk's rest-of-season values (nbaTradeRows). The page shows:
@@ -7865,6 +8010,46 @@ function NbaMatchupColumn({ side, team, align }) {
   );
 }
 
+// A basketball league's waiver wire: today's pickups and the best players by
+// rest-of-season value that nobody in the league has, with a tip for its type.
+function NbaLeagueWaivers({ league, raw, rows, games, myRosterId }) {
+  const index = useMemo(() => rosterIndex(raw.rosters, raw.users, null, myRosterId), [raw, myRosterId]);
+  const ownerOf = (id) => (id != null ? index.rosteredBy[String(id)] || null : null);
+  const isDynasty = [1, 2].includes(league.settings?.type);
+  const best = useMemo(() => rows.filter((r) => !index.rosteredBy[r.id] && r.value > 0)
+    .sort((a, b) => b.value - a.value).slice(0, 8), [rows, index]);
+  const tip = isDynasty
+    ? "Dynasty: a pickup is a long-term roster spot, so favor young players earning minutes over a hot week from a veteran, and drop a short-term add once his role shrinks."
+    : "Redraft: only this season counts, so take whoever has the role and the most games left this week, and stream the last bench spot.";
+  return (
+    <ProfileSection title="Waiver wire" aside={`Who's still available here · advice for ${isDynasty ? "dynasty" : "redraft"}`}>
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{tip}</p>
+      <LeagueScope sport="nba" league={{ leagueId: league.league_id, name: league.name, userId: null, ...index }}>
+        <NbaPickups games={games} ownerOf={ownerOf} hideRostered />
+      </LeagueScope>
+      {best.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            Best available by rest-of-season value
+            <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}> · in this league's scoring</span>
+          </h3>
+          <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {best.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="min-w-0 truncate">
+                  <PlayerLink sport="nba" id={r.id}>{r.name}</PlayerLink>{" "}
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.position} · {r.team || "FA"}</span>
+                </span>
+                <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmtPts(r.fpg)} FPG</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </ProfileSection>
+  );
+}
+
 function NbaLeagues({ data }) {
   const my = React.useContext(MyLeagueContext);
   const [hashId, setHashId] = useState(nbaLeagueIdFromHash);
@@ -7935,7 +8120,7 @@ function NbaLeagues({ data }) {
       <div className="flex flex-col gap-5">
         {header}
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Connect your Sleeper basketball league. It's remembered in this browser, and the Waiver Desk uses it too.
+          Look up your Sleeper basketball league, dynasty or redraft. It's remembered in this browser.
         </p>
         <MyLeagueBar sport="nba" />
       </div>
@@ -7994,6 +8179,8 @@ function NbaLeagues({ data }) {
               </div>
             )}
           </ProfileSection>
+
+          <NbaLeagueWaivers league={league} raw={raw} rows={rows} games={games} myRosterId={myRosterId} />
 
           {pairs.length > (mine ? 1 : 0) && (
             <ProfileSection title="Around the league">
@@ -8172,8 +8359,9 @@ const MineStar = () => <span className="ml-1 text-xs" title="On your team" aria-
 /* ---------- my league (both sports) ---------- */
 // Your own Sleeper league for each sport, saved in the browser
 // ({ nfl: { leagueId, name, userId, availableOnly }, nba: … }). Your players get
-// a ★ wherever a PlayerLink shows them, the Waiver Desks can hide everyone
-// already on a roster, and the home page links to your Boardroom league.
+// a ★ wherever a PlayerLink shows them and the home page links to your
+// Boardroom league. (The Waiver Desks are league-neutral; each league's page
+// has its own waiver wire.)
 const MY_LEAGUE_KEY = "ff-valuediff:my-league";
 const MyLeagueContext = React.createContext({ save: () => {} });
 
@@ -8188,6 +8376,34 @@ function readMyLeagues() {
     for (const sport of ["nfl", "nba"]) if (myLeagueFields(saved[sport])) out[sport] = myLeagueFields(saved[sport]);
     return out;
   } catch (e) { return {}; }
+}
+
+// Who's on whose roster in a league: { rosteredBy: {sleeperId: team name},
+// mine: Set of the user's (or the given roster's) Sleeper ids }. Reserve and
+// taxi spots count as rostered.
+function rosterIndex(rosters, users, userId, rosterId = null) {
+  const names = Object.fromEntries((users || []).map((u) => [u.user_id, u.metadata?.team_name || u.display_name]));
+  const rosteredBy = {};
+  const mine = new Set();
+  for (const r of rosters || []) {
+    const owner = names[r.owner_id] || `Team ${r.roster_id}`;
+    const isMine = rosterId != null ? r.roster_id === rosterId
+      : !!userId && (r.owner_id === userId || (r.co_owners || []).includes(userId));
+    for (const pid of [...(r.players || []), ...(r.reserve || []), ...(r.taxi || [])]) {
+      rosteredBy[pid] = owner;
+      if (isMine) mine.add(String(pid));
+    }
+  }
+  return { rosteredBy, mine };
+}
+
+// Swaps in one league for one sport below it: a league's own page passes
+// that league ({ leagueId, name, userId, rosteredBy, mine }, shown as
+// available-only), the Waiver Desks pass null so they're league-neutral.
+function LeagueScope({ sport, league, children }) {
+  const my = React.useContext(MyLeagueContext);
+  const value = useMemo(() => ({ ...my, [sport]: league ? { availableOnly: true, ...league } : null }), [my, sport, league]);
+  return <MyLeagueContext.Provider value={value}>{children}</MyLeagueContext.Provider>;
 }
 
 // App-level: the saved leagues plus who's on whose roster (Sleeper ids), kept
@@ -8208,18 +8424,7 @@ function useMyLeagueState() {
       if (!l) { setRosters((r) => ({ ...r, [sport]: null })); continue; }
       Promise.all([sleeperGet(`/league/${l.leagueId}/rosters`), sleeperGet(`/league/${l.leagueId}/users`)])
         .then(([list, users]) => {
-          const names = Object.fromEntries((users || []).map((u) => [u.user_id, u.metadata?.team_name || u.display_name]));
-          const rosteredBy = {};
-          const mine = new Set();
-          for (const r of list || []) {
-            const owner = names[r.owner_id] || `Team ${r.roster_id}`;
-            const isMine = l.userId && (r.owner_id === l.userId || (r.co_owners || []).includes(l.userId));
-            for (const pid of [...(r.players || []), ...(r.reserve || []), ...(r.taxi || [])]) {
-              rosteredBy[pid] = owner;
-              if (isMine) mine.add(String(pid));
-            }
-          }
-          setRosters((r) => ({ ...r, [sport]: { rosteredBy, mine } }));
+          setRosters((r) => ({ ...r, [sport]: rosterIndex(list, users, l.userId) }));
         })
         .catch(() => {}); // keeps the last rosters up
     }
@@ -8246,8 +8451,8 @@ const RosteredTag = ({ owner }) => owner ? (
   <span className="text-[11px] ml-1.5 whitespace-nowrap" title={`On ${owner}'s roster`} style={{ color: "var(--text-muted)" }}>· Rostered</span>
 ) : null;
 
-// The "Your league" bar on the Waiver Desks: connect a Sleeper league once,
-// then toggle between everyone and only the players still available in it.
+// The basketball My Leagues lookup: find a Sleeper league by username or ID
+// and save it.
 function MyLeagueBar({ sport }) {
   const my = React.useContext(MyLeagueContext);
   const l = my[sport];
@@ -8301,7 +8506,7 @@ function MyLeagueBar({ sport }) {
   return (
     <div className={box} style={boxStyle}>
       <form onSubmit={find} className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <span className="sm:mr-1" style={{ color: "var(--text-secondary)" }}>See who's actually available in your Sleeper league:</span>
+        <span className="sm:mr-1" style={{ color: "var(--text-secondary)" }}>Look up your Sleeper league:</span>
         <span className="flex gap-2 flex-1">
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Sleeper username or league ID" aria-label="Sleeper username or league ID"
             className="rounded-md border px-3 py-1.5 text-sm flex-1 min-w-0" style={inputStyle} />
@@ -9130,8 +9335,8 @@ const PAGES = [
     blurb: "The live weekly injury report, who's on IR or PUP, and the earliest week each player can return." },
   { key: "nfl-rankings", sport: "nfl", label: "Weekly Rankings", short: "Film Room", hash: "#/rankings", group: "Game week",
     blurb: "Every player ranked by this week's projected points in your scoring, plus a start/sit call for tough lineup spots." },
-  { key: "leagues", sport: "nfl", label: "My Leagues", short: "Boardroom", hash: "#/leagues", group: "Dynasty",
-    blurb: "Your Sleeper leagues, each valued with its own settings and lineup, as dynasty or redraft: power rankings and where your team stands." },
+  { key: "leagues", sport: "nfl", label: "My Leagues", short: "Boardroom", hash: "#/leagues", group: "Game week",
+    blurb: "Look up any Sleeper league, dynasty or redraft: where your team stands, waiver pickups still available there and trade ideas, with advice for its format." },
   { key: "targets", sport: "nfl", label: "Trade Targets", short: "Trade Block", hash: "#/targets", group: "Dynasty",
     blurb: "Players worth trading for in dynasty, by position: veterans to buy if you're competing, young players if you're rebuilding." },
   { key: "draftboard", sport: "nfl", label: "Player Values", short: "War Room", hash: "#/draftboard", group: "Dynasty",

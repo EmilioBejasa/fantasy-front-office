@@ -288,18 +288,31 @@ on demand (`fetchSleeperPlayerMap`) and caches it in `localStorage` for 6
 hours (`SLEEPER_PLAYERS_CACHE_KEY`). Only if the file is missing or more
 than 12 hours old does it fetch the full list from Sleeper itself.
 
-**Your league** (`MyLeagueBar`, both Waiver Desks): connect a Sleeper
-username (or league ID) and pick a league. **Available only** then hides
-anyone already on a roster in it, and **Everyone** shows them tagged
-"Rostered". The choice is saved per sport (`ff-valuediff:my-league`:
-league ID, name, user ID and the toggle; rosters are fetched fresh each
-visit and on the refresh tick, `useMyLeagueState`). It also stars **your**
-players (★) wherever a player name link appears, puts a "Your league" link on
-the home page, and can be set from a Boardroom league page (**Make this my
-league**).
+**League-neutral desks, league-aware league pages.** The Waiver Desks don't
+take a league: they show every target, with FAAB bids as a share of the budget
+(`LeagueScope` with `league={null}` hides any saved league from them). Each
+league's own page in **My Leagues** (both sports) has a **Waiver wire** section
+instead (`LeagueWaivers`, `NbaLeagueWaivers`): the same hand-picked and live
+picks limited to players nobody in that league has (`rosterIndex`), FAAB bids
+from that league's history, and the best available players by the league's own
+values (`bestAvailable`: dynasty value in dynasty, this season's value in
+redraft). The advice follows the format (`leagueWaiverTips`): dynasty vs
+redraft, best ball, superflex, TE premium, league size and FAAB vs waiver
+priority. Hand-picked targets are re-tiered for it (`leagueWaiverCall`): up a
+tier for a QB in superflex, a TE with TE premium, and in dynasty a player whose
+value ranks inside `WAIVER_KEEPER_DEPTH` per team ("Dynasty keeper"; low-value
+streamers are tagged "Short-term only"), plus a tag when he'd fill one of your
+bottom-third position rooms.
+
+**Your league** (`ff-valuediff:my-league`): **Make this my league** on a
+league page saves it per sport (league ID, name, user ID; rosters are fetched
+fresh each visit and on the refresh tick, `useMyLeagueState`). It stars
+**your** players (★) wherever a player name link appears and puts a "Your
+league" link on the home page. Basketball's My Leagues finds a league by
+username or ID with `MyLeagueBar`.
 
 **FAAB bids** (`faabMarket`, `faabBid`, `useFaabMarket`, football only) sit under
-each target's priority. In a connected FAAB league (Sleeper's
+each target's priority. On a FAAB league's page (Sleeper's
 `settings.waiver_type` 2) they're dollars: each tier takes a range of the bids the
 league has won this season (Must Add the 75th-95th percentile, Speculative
 45th-70th, Streamer 15th-35th, Deep League up to the 15th), or a share of the budget
@@ -307,7 +320,7 @@ until there are `FAAB_MIN_HISTORY` bids. Either is multiplied by a pace, the
 league's average money left against an even spend to the playoffs (0.75-1.5×), and
 capped at what you have left if a username was connected (with a league ID there's
 no "you"). A summary shows your money, the most on another team, the league average
-and the winning bids so far. With no league connected, bids are a share of the
+and the winning bids so far. On the Waiver Desk, bids are a share of the
 budget; in a league without FAAB, none show.
 
 **Live picks** (`LivePicks`, `buildLivePicks`) are worked out on every visit

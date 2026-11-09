@@ -542,3 +542,43 @@ test("nbaReturnLabel and name keys", () => {
   assert.equal(app.nbaNameKey("Jimmy Butler III"), app.nbaNameKey("Jimmy Butler"));
   assert.equal(app.nbaNameKey("Yanic Konan Niederhäuser"), app.nbaNameKey("Yanic Konan Niederhauser"));
 });
+
+test("leagueWaiverCall: re-tiers and tags a waiver target for the league's format", () => {
+  const base = { isDynasty: false, superflex: false, tep: 0, teams: 12, keeper: () => false, roomRank: () => null };
+  const qb = { id: "q", name: "Q", position: "QB", priority: "Streamer" };
+  // Redraft 1QB: unchanged.
+  assert.equal(app.leagueWaiverCall(qb, base).priority, "Streamer");
+  // Superflex moves a QB up a tier and says why.
+  const sf = app.leagueWaiverCall(qb, { ...base, superflex: true });
+  assert.equal(sf.priority, "Speculative");
+  assert.deepEqual(plain(sf.tags), ["Superflex QB"]);
+  // Dynasty: a keeper moves up (never past Must Add); a low-value streamer is a rental.
+  const must = { id: "m", name: "M", position: "WR", priority: "Must Add" };
+  assert.equal(app.leagueWaiverCall(must, { ...base, isDynasty: true, keeper: () => true }).priority, "Must Add");
+  assert.deepEqual(plain(app.leagueWaiverCall(qb, { ...base, isDynasty: true }).tags), ["Short-term only"]);
+  // A bottom-third room gets flagged; a middling one doesn't.
+  const rb = { id: "r", name: "R", position: "RB", priority: "Deep League" };
+  assert.deepEqual(plain(app.leagueWaiverCall(rb, { ...base, roomRank: () => 11 }).tags), ["Your RB room: 11th of 12"]);
+  assert.deepEqual(plain(app.leagueWaiverCall(rb, { ...base, roomRank: () => 6 }).tags), []);
+});
+
+test("leagueWaiverTips and bestAvailable follow the league", () => {
+  const league = (settings, extra = {}) => ({ total_rosters: 12, settings, scoring_settings: { rec: 1 }, roster_positions: ["QB", "RB"], ...extra });
+  const redraft = app.leagueWaiverTips(league({ type: 0, waiver_type: 0 }), { isDynasty: false });
+  assert.match(redraft[0], /^Redraft/);
+  assert.ok(redraft.some((t) => /Waiver priority/.test(t)));
+  const dyn = app.leagueWaiverTips(league({ type: 2, waiver_type: 2, best_ball: 1 }, { roster_positions: ["QB", "SUPER_FLEX"] }), { isDynasty: true });
+  assert.match(dyn[0], /^Dynasty/);
+  assert.ok(dyn.some((t) => /^Best ball/.test(t)) && dyn.some((t) => /^Superflex/.test(t)) && dyn.some((t) => /^FAAB/.test(t)));
+
+  const rows = [
+    { id: "1", position: "RB", value: 900, redraftValue: 100 },
+    { id: "2", position: "WR", value: 500, redraftValue: 800 },
+    { id: "3", position: "WR", value: 700, redraftValue: 700 },
+    { id: "9", position: "PICK", value: 5000 },
+  ];
+  const ids = (opts) => plain(app.bestAvailable(rows, { 3: "Team" }, opts).map((r) => r.id));
+  assert.deepEqual(ids({ isDynasty: true }), ["1", "2"]);
+  assert.deepEqual(ids({ isDynasty: false }), ["2", "1"]);
+  assert.deepEqual(ids({ isDynasty: true, skip: (r) => r.id === "1" }), ["2"]);
+});

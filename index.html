@@ -7539,43 +7539,48 @@ function NbaWaiversBody({ data, settings }) {
         <a href={NBA_LEAGUES_HASH} className="font-medium" style={{ color: "var(--sport)" }}>My Leagues</a>.
       </p>
 
-      <NbaPickups games={games} ownerOf={ownerOf} hideRostered={hideRostered} />
-
-      <section className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             Trending on Sleeper <span className="font-normal" style={{ color: "var(--text-muted)" }}>· live</span>
           </h3>
           <PillGroup options={[{ key: "add", label: "Adds" }, { key: "drop", label: "Drops" }]} value={direction} onChange={setDirection} />
         </div>
-        {trend.status === "loading" && <p className="text-sm py-3 text-center" style={{ color: "var(--text-muted)" }}>Loading…</p>}
-        {trend.status === "error" && <p className="text-sm py-3 text-center" style={{ color: "var(--text-muted)" }}>Couldn't reach Sleeper ({trend.message}).</p>}
+        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+          Real-time — how many Sleeper fantasy teams have {direction === "add" ? "added" : "dropped"} each player
+          in the last {SLEEPER_TRENDING_LOOKBACK_HOURS}h, straight from Sleeper's public API. This is raw
+          community activity — no reasoning behind why a name is moving, unlike the picks below.
+        </p>
+        {trend.status === "loading" && (
+          <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)" }}>Loading live data from Sleeper…</p>
+        )}
+        {trend.status === "error" && (
+          <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)" }}>
+            Couldn't reach Sleeper's API ({trend.message}). This needs the page served over http(s) with network
+            access — it won't work from a plain double-clicked file.
+          </p>
+        )}
         {trend.status === "live" && (
-          <ol className="grid gap-x-6 sm:grid-cols-2">
-            {trend.rows.filter((t) => !(hideRostered && ownerOf(t.player_id))).slice(0, 20).map((t, i) => {
+          <div className="flex flex-wrap gap-2">
+            {trend.rows.filter((t) => !(hideRostered && ownerOf(t.player_id))).slice(0, SLEEPER_TRENDING_LIMIT).map((t) => {
               const p = data.players[t.player_id];
-              const s = byId[t.player_id];
               return (
-                <li key={t.player_id} className="flex items-center justify-between gap-3 py-1.5 border-b text-sm" style={{ borderColor: "var(--border)" }}>
-                  <span className="min-w-0 truncate">
-                    <span className="tabular-nums text-xs mr-2" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-                    <PlayerLink sport="nba" id={t.player_id}>{p.name}</PlayerLink>{" "}
-                    <PosBadge pos={p.position} /> <span className="text-xs" style={{ color: "var(--text-muted)" }}>{p.team}</span>
-                    <NbaInjuryTag status={p.status} /><RosteredTag owner={ownerOf(t.player_id)} />
+                <div key={t.player_id} className="rounded-md border px-2.5 py-1.5 text-xs flex items-center gap-2"
+                  style={{ borderColor: "var(--border)" }}>
+                  <PlayerLink sport="nba" id={t.player_id}>{p.name}</PlayerLink>
+                  <span style={{ color: "var(--text-muted)" }}>{p.position} · {p.team || "FA"}{p.status ? ` · ${p.status}` : ""}<RosteredTag owner={ownerOf(t.player_id)} /></span>
+                  <span className="tabular-nums font-semibold" style={{ color: direction === "add" ? "var(--series-blue)" : "var(--series-red)" }}>
+                    {t.count.toLocaleString()}
                   </span>
-                  <span className="flex items-center gap-3 shrink-0 tabular-nums">
-                    <span className="hidden sm:inline"><NbaGamesNote games={games} team={p.team} /></span>
-                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{s ? `${fmt1(nbaFpg(s, settings.scoring))} FPG` : "no games"}</span>
-                    <span className="font-semibold" style={{ color: direction === "add" ? "var(--trend-up)" : "var(--series-red)" }}>
-                      {t.count.toLocaleString()}
-                    </span>
-                  </span>
-                </li>
+                </div>
               );
             })}
-          </ol>
+          </div>
         )}
-      </section>
+      </div>
+
+      <NbaPickups games={games} ownerOf={ownerOf} hideRostered={hideRostered} />
+
 
       <section className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Heating up <span className="font-normal" style={{ color: "var(--text-muted)" }}>· last two weeks vs. before</span></h3>

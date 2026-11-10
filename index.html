@@ -6886,7 +6886,7 @@ function ProspectProfile({ data, settings }) {
 // Trade Market (dynasty and redraft values) comes from data/nba-market.js.
 
 const NBA_SETTINGS_KEY = "ff-valuediff:nba-settings-v1";
-const DEFAULT_NBA_SETTINGS = { scoring: "standard", teams: 12, raw: false, values: "season" };
+const DEFAULT_NBA_SETTINGS = { scoring: "standard", teams: 12, raw: false, values: "season", boardValues: "dynasty" };
 const NBA_SETTING_OPTIONS = {
   scoring: [{ key: "standard", label: "Standard" }, { key: "espn", label: "ESPN" }],
   teams: [8, 10, 12, 14, 16].map((n) => ({ key: n, label: String(n) })),
@@ -8719,40 +8719,82 @@ function NbaLeagues({ data }) {
   );
 }
 
-// Draft board: the same Sleeper-style board as football, ranked by the Trade
-// Analyzer's values (projected rest-of-season fantasy points), so 1.01 is the
-// player expected to score the most from here on.
+// Draft board: the same Sleeper-style board as football. By default it is
+// ranked by the Trade Market (dynasty or redraft values from real Sleeper
+// trades; dynasty boards can mix in rookie picks), or by the Trade Analyzer's
+// season stats (projected rest-of-season fantasy points).
 const NBA_BOARD_ROUNDS = roundOptions([5, 10, 13, 15]);
+const NBA_DYNASTY_BOARD_ROUNDS = roundOptions([5, 10, 13, 15, 20]);
+const NBA_BOARD_VALUES = [{ key: "dynasty", label: "Dynasty market" }, { key: "redraft", label: "Redraft market" }, { key: "season", label: "Season stats" }];
 
 function NbaDraftBoard({ data, settings, setSettings }) {
-  const { rows, gamesLeft } = useMemo(() => nbaTradeRows(data, settings.scoring), [data, settings.scoring]);
+  const source = NBA_BOARD_VALUES.some((o) => o.key === settings.boardValues) ? settings.boardValues : "dynasty";
+  const useMarket = source !== "season";
+  const [picksSetting, setPicks] = useState("on");
+  const withPicks = source === "dynasty" && picksSetting === "on";
+  const market = useDataFile(loadNbaMarket, useMarket);
+  const season = useMemo(() => nbaTradeRows(data, settings.scoring), [data, settings.scoring]);
+  const fpgById = useMemo(() => Object.fromEntries(season.rows.map((r) => [r.id, r.fpg])), [season.rows]);
+  const marketRows = useMemo(() => (useMarket && market ? nbaMarketRows(market, source, data.players) : []), [useMarket, market, source, data.players]);
+  const rows = useMemo(() => (useMarket ? marketRows.filter((r) => withPicks || !r.pick) : season.rows), [useMarket, marketRows, withPicks, season.rows]);
   const scoring = settings.scoring === "espn" ? "ESPN" : "Standard";
+  const size = settings.teams >= 16 ? "16+" : settings.teams;
+  const building = useMarket && market?.stats?.[source]?.building;
 
   return (
     <div className="flex flex-col gap-5">
       <NbaPageHeader title="Draft Board"
-        lead={`A ${settings.teams >= 16 ? "16+" : settings.teams}-team ${scoring} points draft if every team took the most valuable player left: 1.01 is projected to score the most fantasy points the rest of the way.`}>
-        Values are the Trade Analyzer's: points per game × the {gamesLeft} team games left × how often he plays, with points
-        per game blending this season and last until he's played {NBA_BLEND_GAMES} games. Each card shows fantasy points per
-        game. Rookies and anyone without NBA games yet aren't on the board until they play. {NBA_SCORING_NOTE[settings.scoring]}
+        lead={useMarket
+          ? `A ${size}-team ${source === "dynasty" ? "dynasty startup" : "redraft"} draft if every team took the most valuable ${withPicks ? "asset" : "player"} left, by Trade Market values: 1.01 is the No. 1 on the Trading Floor.`
+          : `A ${size}-team ${scoring} points draft if every team took the most valuable player left: 1.01 is projected to score the most fantasy points the rest of the way.`}>
+        {useMarket ? <>
+          Values are the Trade Market's: what managers have actually paid for each player{source === "dynasty" && " and rookie pick"} in
+          real completed Sleeper {source} trades, on a 0-9,999 scale (see the <a href="#/nba/market" className="underline">Trading
+          Floor</a> for the method, trends and trade counts). Each card shows his market value. Players traded only a few times lean
+          on the site's model value. {source === "dynasty" && "Turn Picks off to leave rookie picks off the board. "}The board is
+          what the values say, not real drafts or ADP.
+        </> : <>
+          Values are the Trade Analyzer's: points per game × the {season.gamesLeft} team games left × how often he plays, with points
+          per game blending this season and last until he's played {NBA_BLEND_GAMES} games. Each card shows fantasy points per
+          game. Rookies and anyone without NBA games yet aren't on the board until they play. {NBA_SCORING_NOTE[settings.scoring]}
+        </>}
       </NbaPageHeader>
       <NbaSeasonNote data={data} />
 
       <div className="flex items-end flex-wrap gap-x-4 gap-y-2">
-        <LabeledControl label="Scoring">
-          <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
-            onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
+        <LabeledControl label="Values">
+          <PillGroup options={NBA_BOARD_VALUES} value={source}
+            onChange={(v) => setSettings((s) => ({ ...s, boardValues: v }))} />
         </LabeledControl>
+        {!useMarket && (
+          <LabeledControl label="Scoring">
+            <PillGroup options={NBA_SETTING_OPTIONS.scoring} value={settings.scoring}
+              onChange={(v) => setSettings((s) => ({ ...s, scoring: v }))} />
+          </LabeledControl>
+        )}
         <LabeledControl label="Teams">
           <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
             onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
         </LabeledControl>
       </div>
 
-      <BoardGrid sport="nba" players={rows} teams={settings.teams} roundChoices={NBA_BOARD_ROUNDS} defaultRounds={13}
-        highlightOptions={NBA_POSITION_OPTIONS} matchPos={(p, pos) => nbaPosMatch(data.players[p.id] || p, pos)}
-        stat={(p) => fmt1(p.fpg)}
-        tip={(p) => `${p.name} · ${p.position}${p.posRank} · ${fmt1(p.fpg)} FPG · ${p.value.toLocaleString()} projected points${p.age ? ` · age ${p.age}` : ""}`} />
+      {useMarket && market === undefined && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading Trade Market values…</p>}
+      {useMarket && market === null && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>The Trade Market values couldn't be loaded. Try Season stats.</p>}
+      {building && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>The {source} market is still building: too few trades so far, so these values are mostly the model's.</p>}
+
+      {(!useMarket || market) && (
+        <BoardGrid key={source} sport="nba" players={rows} teams={settings.teams}
+          roundChoices={source === "dynasty" ? NBA_DYNASTY_BOARD_ROUNDS : NBA_BOARD_ROUNDS} defaultRounds={13}
+          highlightOptions={withPicks ? [...NBA_POSITION_OPTIONS, BOARD_PICK_HIGHLIGHT] : NBA_POSITION_OPTIONS}
+          matchPos={(p, pos) => (pos === "PICK" ? !!p.pick : !p.pick && nbaPosMatch(data.players[p.id] || p, pos))}
+          extraControls={source === "dynasty" && (
+            <LabeledControl label="Picks"><PillGroup options={BOARD_PICKS_OPTIONS} value={picksSetting} onChange={setPicks} /></LabeledControl>
+          )}
+          stat={(p) => (useMarket ? p.value.toLocaleString() : fmt1(p.fpg))}
+          tip={(p) => (useMarket
+            ? `${p.name} · ${p.pick ? "rookie pick" : `${p.position}${p.posRank}`} · market value ${p.value.toLocaleString()}${fpgById[p.id] != null ? ` · ${fmt1(fpgById[p.id])} FPG` : ""}${p.age ? ` · age ${p.age}` : ""} · ${Math.round(p.trades)} trade${Math.round(p.trades) === 1 ? "" : "s"}${p.thin ? " (thin)" : ""}`
+            : `${p.name} · ${p.position}${p.posRank} · ${fmt1(p.fpg)} FPG · ${p.value.toLocaleString()} projected points${p.age ? ` · age ${p.age}` : ""}`)} />
+      )}
     </div>
   );
 }
@@ -9643,6 +9685,15 @@ function NbaProfile({ data, settings }) {
   const { rows } = useMemo(() => nbaTradeRows(data, settings.scoring), [data, settings.scoring]);
   const index = rows.findIndex((r) => r.id === id);
   const row = rows[index];
+  // The Draft Board slot follows the board's own Values setting (the Trade
+  // Market by default, rookie picks included in dynasty).
+  const boardSource = NBA_BOARD_VALUES.some((o) => o.key === settings.boardValues) ? settings.boardValues : "dynasty";
+  const boardMarket = useDataFile(loadNbaMarket, boardSource !== "season");
+  const boardIndex = useMemo(() => {
+    if (boardSource === "season") return index;
+    return boardMarket ? nbaMarketRows(boardMarket, boardSource, data.players).findIndex((r) => r.id === id) : -1;
+  }, [boardSource, boardMarket, data.players, id, index]);
+  const boardLabel = { dynasty: "dynasty market", redraft: "redraft market", season: "season stats" }[boardSource];
   const info = data.players[id];
   const season = data.activeSeason;
   const feeds = useFeeds(id && season ? [nbaPlayerLogUrl(id, season)] : null);
@@ -9696,8 +9747,8 @@ function NbaProfile({ data, settings }) {
         <StatTile label={`${nbaSeasonLabel(season)} FPG`} value={cur ? fmt1(nbaFpg(cur, settings.scoring)) : "–"}
           sub={cur ? `${scoringLabel} scoring · ${cur.gp} games` : "No games this season"} />
         <StatTile label="Plays" value={row ? `${Math.round(row.avail * 100)}%` : "–"} sub="of his team's games" />
-        <StatTile label="Draft Board slot" value={row ? boardPick(index, settings.teams) : "–"}
-          sub={row ? `In a ${settings.teams >= 16 ? "16+" : settings.teams}-team draft` : null} />
+        <StatTile label="Draft Board slot" value={boardIndex >= 0 ? boardPick(boardIndex, settings.teams) : "–"}
+          sub={boardIndex >= 0 ? `${settings.teams >= 16 ? "16+" : settings.teams}-team draft · ${boardLabel}` : null} />
       </div>
 
       {feeds.status === "error" && (
@@ -9820,7 +9871,7 @@ const PAGES = [
   { key: "nba-rankings", sport: "nba", label: "Player Rankings", short: "Big Board", hash: "#/nba/rankings", group: "Front office",
     blurb: "Every player ranked by fantasy points per game in your league's scoring, with per-game stats." },
   { key: "nba-draftboard", sport: "nba", label: "Draft Board", short: "War Room", hash: "#/nba/draftboard", group: "Front office",
-    blurb: "A Sleeper-style draft board filled in by projected rest-of-season fantasy points." },
+    blurb: "A Sleeper-style draft board filled in by Trade Market dynasty or redraft values (or projected rest-of-season points)." },
   { key: "nba-market", sport: "nba", label: "Trade Market", short: "Trading Floor", hash: "#/nba/market", group: "Front office",
     blurb: "KeepTradeCut-style dynasty and redraft values, built from real trades in public Sleeper leagues, with trends and the latest deals." },
   { key: "nba-player", sport: "nba", label: "Player Profile", short: "Player File", hash: "#/nba/player/", hidden: true },

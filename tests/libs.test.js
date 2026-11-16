@@ -236,3 +236,63 @@ test("nba-market ageFactor and priorValues: young players climb in dynasty", () 
   assert.equal(Math.round(r.young), Math.round(r.old));
   assert.ok(d["pick-1-1"] > 0 && r["pick-1-1"] == null);
 });
+
+const nfl = require("../scripts/lib/nfl-market");
+const crawl = require("../scripts/lib/sleeper-crawl");
+
+test("nfl-market leagueExtra and formatOf: Superflex from the lineup, TE premium from scoring", () => {
+  assert.deepEqual(nfl.leagueExtra({ roster_positions: ["QB", "RB", "SUPER_FLEX"], scoring_settings: { bonus_rec_te: 0.5 } }), { qb: "sf", tep: 0.5 });
+  assert.deepEqual(nfl.leagueExtra({ roster_positions: ["QB", "QB", "WR"], scoring_settings: {} }), { qb: "sf", tep: 0 });
+  assert.equal(nfl.leagueExtra({ roster_positions: ["QB", "FLEX"] }).qb, "1qb");
+  assert.equal(nfl.formatOf({ type: 2, qb: "sf" }), "dynasty-sf");
+  assert.equal(nfl.formatOf({ type: 0, qb: "1qb" }), "redraft-1qb");
+  assert.equal(nfl.formatOf({ type: 3, qb: "1qb" }), null);
+});
+
+test("nfl-market parseTrade: picks by rookie drafts away, redraft drops picks, TEP and keepers count half", () => {
+  const inSeason = Date.UTC(2026, 9, 15), offseason = Date.UTC(2026, 3, 1);
+  const tx = (ts) => ({
+    type: "trade", status: "complete", transaction_id: 7, status_updated: ts, roster_ids: [1, 2], adds: { 100: 1, 200: 2 },
+    draft_picks: [{ season: "2027", round: 1, owner_id: 1 }, { season: "2026", round: 2, owner_id: 2 }, { season: "2027", round: 5, owner_id: 2 }],
+  });
+  const league = { id: "L", type: 2, size: 12, season: "2026", qb: "sf", tep: 0 };
+  const t = nfl.parseTrade(tx(inSeason), league);
+  assert.equal(t.format, "dynasty-sf");
+  assert.deepEqual(t.sides, [["100", "pick-1-1"], ["200"]]); // 2026 picks are made by October; no 5th rounds
+  const pre = nfl.parseTrade(tx(offseason), league);
+  assert.deepEqual(pre.sides, [["100", "pick-2-1"], ["200", "pick-1-2"]]); // before the 2026 draft, it's next
+  assert.deepEqual(nfl.parseTrade(tx(inSeason), { ...league, type: 0 }).sides, [["100"], ["200"]]);
+  assert.equal(nfl.parseTrade(tx(inSeason), { ...league, tep: 1 }).weight, 0.5);
+  assert.equal(nfl.parseTrade(tx(inSeason), { ...league, type: 1, tep: 1 }).weight, 0.25);
+  assert.equal(nfl.parseTrade({ ...tx(inSeason), roster_ids: [1, 2, 3] }, league), null);
+  assert.equal(nfl.pickInfo("pick-1-1", inSeason).label, "2027 1st");
+  assert.equal(nfl.pickInfo("pick-1-1", offseason).label, "2026 1st");
+});
+
+test("nfl-market priorValues: young players climb in dynasty, Superflex lifts QBs, picks are dynasty-only", () => {
+  const players = {
+    qb: { name: "QB", position: "QB", age: 27 }, wr: { name: "WR", position: "WR", age: 26 },
+    young: { name: "Young", position: "RB", age: 22 }, old: { name: "Old", position: "RB", age: 29 },
+  };
+  for (let i = 0; i < 60; i++) players[`f${i}`] = { name: `F${i}`, position: ["QB", "RB", "WR", "TE"][i % 4], age: 27 };
+  const cur = { qb: { gp: 9, pts: 200 }, wr: { gp: 9, pts: 160 }, young: { gp: 9, pts: 150 }, old: { gp: 9, pts: 150 } };
+  for (let i = 0; i < 60; i++) cur[`f${i}`] = { gp: 9, pts: 40 + i };
+  const inputs = nfl.playerInputs({ players, cur, prev: {} });
+  const d1 = nfl.priorValues(inputs, "dynasty-1qb"), dsf = nfl.priorValues(inputs, "dynasty-sf"), r = nfl.priorValues(inputs, "redraft-1qb");
+  assert.ok(d1.young > d1.old * 1.2);
+  assert.equal(Math.round(r.young), Math.round(r.old));
+  assert.ok(dsf.qb / dsf.wr > d1.qb / d1.wr);
+  assert.ok(d1["pick-1-1"] > 0 && r["pick-1-1"] == null);
+  assert.deepEqual(nfl.pagePickValues("pick-1-1", 4000, Date.UTC(2026, 9, 15)), { "2027-1-early": 5000, "2027-1-mid": 4000, "2027-1-late": 3200 });
+});
+
+test("sleeper-crawl addPoint and trend: one point a week, the newest moves forward", () => {
+  const h = { dates: [] };
+  crawl.addPoint(h, "2026-10-01", { a: [{ id: "x", v: 100 }] }, ["a"], 53);
+  crawl.addPoint(h, "2026-10-08", { a: [{ id: "x", v: 110 }] }, ["a"], 53);
+  crawl.addPoint(h, "2026-10-10", { a: [{ id: "x", v: 120 }] }, ["a"], 53);
+  crawl.addPoint(h, "2026-10-12", { a: [{ id: "x", v: 130 }] }, ["a"], 53);
+  assert.deepEqual(h.dates, ["2026-10-01", "2026-10-08", "2026-10-12"]);
+  assert.deepEqual(h.a.x, [100, 110, 130]);
+  assert.deepEqual(crawl.trend(h, "a", 11), { x: 30 });
+});

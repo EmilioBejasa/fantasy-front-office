@@ -1,0 +1,47 @@
+# Crawls public Sleeper football leagues for completed trades and refits
+# the site's own football dynasty and redraft values (scripts/refresh-nfl-market.js),
+# then commits the values and history (data/) and the
+# crawler's state (cache/) if anything changed.
+name: Refresh NFL market
+
+on:
+  schedule:
+    # 12:00 UTC daily, after Refresh players has updated the player list the model
+    # values are built from.
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shares a group with the other refresh jobs so they never push over each other.
+concurrency:
+  group: refresh-index-html
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Crawl Sleeper trades and refit market values
+        run: node scripts/refresh-nfl-market.js
+
+      - name: Commit if changed
+        run: |
+          git add data/nfl-market.js data/nfl-market-history.js cache/nfl-market-crawl.json cache/nfl-trades.json
+          if git diff --cached --quiet; then
+            echo "No market changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh NFL trade market ($(date -u +%Y-%m-%d))"
+          git pull --rebase
+          git push

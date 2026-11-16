@@ -444,26 +444,41 @@ The rest of the page:
 
 ## Dynasty tabs
 
-**Values default to KeepTradeCut.** Every football value in the app (War
-Room, Trade Desk, league pages, profiles, home-page risers) is
-KTC's (`applyMarketValues` in `useDynastyValues`), from the daily
-`data/market-values.js` (see "Consensus across calculators" below):
+**Values default to the site's own football Trade Market.** Every football
+value in the app (War Room, Trade Desk, league pages, profiles, home-page
+risers) comes from `data/nfl-market.js` (`marketValueSet` and
+`applyMarketValues` in `useDynastyValues`), which
+`scripts/refresh-nfl-market.js` rebuilds daily (the Refresh NFL market
+Action) from completed trades in public Sleeper football leagues, with the
+same formula as the basketball Trading Floor (`scripts/lib/nba-market.js`;
+the football parts are in `scripts/lib/nfl-market.js`, the crawl both share
+in `scripts/lib/sleeper-crawl.js`):
 
-- dynasty uses KTC's dynasty values, and KTC's redraft values for the
+- four formats: dynasty and redraft, each 1QB and Superflex (a league with a
+  SUPER_FLEX slot or two QB slots). Keeper and TE-premium leagues' trades
+  count half (TE premium is applied on top by the page, as before);
+- the model the fit starts from (and that a rarely traded player stays near)
+  is PPR points per game above a positional replacement level (this season
+  blended with last), with a per-position age curve over four seasons in
+  dynasty; picks are keyed by rookie drafts away and fit one value per round,
+  with early/late spread around it;
+- dynasty uses the dynasty values, with the redraft values for the
   this-season comparisons (Win-now / Future tags, a team's lean); redraft
-  uses KTC redraft for both;
+  uses redraft for both;
 - FantasyCalc still supplies the player list (names, ages, teams, picks).
-  Players KTC doesn't list keep FantasyCalc's value, rescaled to KTC's scale
-  by the KTC ÷ FantasyCalc ratio of the 10 players nearest them in value
-  (`marketRescaler`). FantasyCalc's generic "2027 1st" is KTC's mid 1st;
-- the 30-day trend is KTC's (`trends` in `data/market-values.js`, from the
-  weekly history), falling back to FantasyCalc's;
-- KTC's values don't change with league size or scoring, so those settings
+  Players the market doesn't list keep FantasyCalc's value, rescaled to the
+  market's scale by the ratio of the 10 players nearest them in value
+  (`marketRescaler`). FantasyCalc's generic "2027 1st" is the mid 1st;
+- the 30-day trend is the market's (from `data/nfl-market-history.js`, one
+  point a week, which also draws the profile graph's Trade Market line and
+  league pages' team sparklines), falling back to FantasyCalc's;
+- the values don't change with league size or scoring, so those settings
   only affect the FantasyCalc fallbacks and the trade calculator's
-  roster-spot credit. TE premium is applied on top as before;
-- FantasyCalc's own values stay on each row (`fcValue`, `fcRedraftValue`)
-  for the trade calculator's consensus. If `data/market-values.js` is
-  missing, the app falls back to FantasyCalc's values throughout.
+  roster-spot credit;
+- KeepTradeCut, DynastyProcess, Dynasty Superflex (`data/market-values.js`)
+  and FantasyCalc (`fcValue`, `fcRedraftValue`) stay as comparisons in the
+  trade calculator's consensus. If `data/nfl-market.js` is missing, KTC's
+  values are used the same way, and without either, FantasyCalc's.
 
 The player list and fallback values are **FantasyCalc's** trade values
 (`https://api.fantasycalc.com/values/current?isDynasty=<true|false>&numQbs=<1|2>&numTeams=<8-14>&ppr=<0|0.5|1>`),
@@ -595,8 +610,8 @@ and everything else uses team, matchup, standings, league pulse, building blocks
   facts that set the team apart in its league (`teamHeadline`: a win or losing streak from Sleeper's roster metadata,
   a top-3 or last points rank, playoff odds of 60%+ or 15% or less, and in dynasty the youngest or oldest lineup, the
   most first-round picks, the hottest or coldest roster value this month). On the right: roster value (counting up),
-  its 30-day change and a sparkline of the players' combined KeepTradeCut value over the last 8 weekly points
-  (`teamValueSeries`, data/market-history.js). **Since your last visit** (`useLastVisit`, this browser's
+  its 30-day change and a sparkline of the players' combined Trade Market value over the last 8 weekly points
+  (`teamValueSeries`, data/nfl-market-history.js). **Since your last visit** (`useLastVisit`, this browser's
   `localStorage`, at least an hour apart) shows the change in value, roster rank and record since then.
 - **Playoff schedule** (`PlayoffSchedule`, `playoffOutlook`): the shown team's lineup against its opponents in the
   league's playoff weeks (`playoffWeeks`, from `playoff_week_start`, `playoff_teams` and `playoff_round_type`). Each game

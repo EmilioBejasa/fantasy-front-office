@@ -317,7 +317,7 @@ test("teamHeadline: a streak, points rank and dynasty standouts, at most three",
 });
 
 test("teamValueSeries: weekly sums, a rookie counting his first value", () => {
-  const history = { dates: ["d1", "d2", "d3"], players: { sf: { a: { ktc: [100, 110, 120] }, b: { ktc: [null, 50, 60] } } } };
+  const history = { dates: ["d1", "d2", "d3"], "dynasty-sf": { a: [100, 110, 120], b: [null, 50, 60] } };
   const team = { assets: [{ id: "a", position: "WR" }, { id: "b", position: "RB" }, { id: "p", position: "PICK" }] };
   assert.deepEqual(plain(app.teamValueSeries(team, history, "sf", 2)), [{ t: "d2", v: 160 }, { t: "d3", v: 180 }]);
   assert.deepEqual(plain(app.teamValueSeries(team, history, "sf").map((p) => p.v)), [150, 160, 180]);
@@ -660,4 +660,30 @@ test("nbaMarketRows and nbaMarketView: ranks, picks, gone players, filters and s
   assert.equal(ids({ query: "bet" }), "b");
   assert.equal(ids({ sortBy: "d30" }), "a,pick-1-1,b");
   assert.equal(app.nbaMarketRows(null, "dynasty", players).length, 0);
+});
+
+test("profileStandings: dynasty and redraft value with overall and position ranks", () => {
+  const players = [
+    { id: "a", position: "WR", value: 9000, redraftValue: 5000 },
+    { id: "b", position: "RB", value: 8000, redraftValue: 7000 },
+    { id: "c", position: "WR", value: 6000, redraftValue: 6500 },
+  ];
+  const st = plain(app.profileStandings(players, "c", { mode: "dynasty", qb: "sf", tep: 0 }));
+  assert.deepEqual(st.dynasty, { value: 6000, rank: 3, posRank: 2 });
+  assert.deepEqual(st.redraft, { value: 6500, rank: 2, posRank: 1 });
+  assert.equal(app.profileStandings(players, "zz", { mode: "dynasty", qb: "sf", tep: 0 }).dynasty, null);
+});
+
+test("seasonForm: per game, last three, projections beaten and games missed", () => {
+  const wk = (week, actual, proj, opp = "KC") => ({ week, actual, proj, opp, oppText: `vs ${opp}`, stats: actual == null ? null : {} });
+  const weeks = [wk(1, 10, 12), wk(2, 20, 15), wk(3, null, 14), wk(4, 30, 18), wk(5, null, null, null), wk(6, 16, 16), wk(7, null, 15)];
+  const f = plain(app.seasonForm(weeks, 7));
+  assert.equal(f.games, 4);
+  assert.equal(f.missed, 1); // week 3; week 5 was a bye and week 7 is still to come
+  assert.equal(f.ppg, 19);
+  assert.equal(f.last3, 22);
+  assert.equal(f.beat, 3);
+  assert.equal(f.vsProj, 3.75);
+  assert.equal(f.best.week, 4);
+  assert.equal(app.seasonForm([wk(1, null, 10)], 1), null);
 });

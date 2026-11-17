@@ -296,3 +296,23 @@ test("sleeper-crawl addPoint and trend: one point a week, the newest moves forwa
   assert.deepEqual(h.a.x, [100, 110, 130]);
   assert.deepEqual(crawl.trend(h, "a", 11), { x: 30 });
 });
+
+test("nfl-market tradeDatabase: newest first, picks become their draft year, names only for players used", () => {
+  const dec = Date.UTC(2025, 11, 10), apr = Date.UTC(2026, 3, 1), oct = Date.UTC(2026, 9, 1);
+  const usable = {
+    "dynasty-sf": [
+      { ts: dec, size: 10, sides: [["100"], ["pick-1-1"]] },  // the 2026 1st
+      { ts: oct, size: 12, sides: [["200"], ["pick-1-2", "100"]] }, // the 2027 2nd
+    ],
+    "redraft-1qb": [{ ts: apr, sides: [["300"], ["100"]] }],
+    "bogus": [{ ts: apr, sides: [["9"], ["9"]] }],
+  };
+  const db = nfl.tradeDatabase(usable, { 100: "A", 200: "B", 400: "Unused" }, Date.UTC(2026, 10, 17));
+  assert.equal(db.draftYear, 2027);
+  assert.deepEqual(db.trades, [
+    [oct, 1, 12, ["200"], ["p2027-2", "100"]],
+    [apr, 2, 12, ["300"], ["100"]],
+    [dec, 1, 10, ["100"], ["p2026-1"]],
+  ]);
+  assert.deepEqual(db.names, { 100: "A", 200: "B", 300: "Unknown player" });
+});

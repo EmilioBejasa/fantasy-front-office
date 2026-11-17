@@ -9,11 +9,14 @@
 //   value, effective trade count and 30-day change.
 // - data/nfl-market-history.js: one point a week per player (dynasty), for
 //   the value graph on player profiles.
+// - data/nfl-trades.js: the Trade Database, every trade the fit used (see
+//   tradeDatabase in lib/nfl-market.js).
 // and keeps its working state in cache/ (committed, not deployed):
 // - cache/nfl-market-crawl.json: the leagues found and how far each has been read.
 // - cache/nfl-trades.json: every trade collected (a year's worth).
 //
-// Usage: node scripts/refresh-nfl-market.js [--budget N] [--concurrency N] [--backfill] [--dry-run]
+// Usage: node scripts/refresh-nfl-market.js [--budget N] [--concurrency N] [--backfill] [--no-crawl] [--dry-run]
+// (--no-crawl refits from the trades already collected, reading no leagues.)
 //
 // Each run spends at most --budget Sleeper requests (default 6000): first
 // finding new leagues (up to MAX_LEAGUES), then reading trades, leagues read
@@ -33,12 +36,14 @@ const TRADES = path.join(ROOT, "cache", "nfl-trades.json");
 const PLAYERS = path.join(ROOT, "data", "nfl-players.js");
 const OUT = path.join(ROOT, "data", "nfl-market.js");
 const HISTORY_OUT = path.join(ROOT, "data", "nfl-market-history.js");
+const DB_OUT = path.join(ROOT, "data", "nfl-trades.js");
 
 const SEED_USER = "asterisk387";
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? Number(args[i + 1]) : null; };
 const DRY_RUN = args.includes("--dry-run");
 const BACKFILL = args.includes("--backfill");
+const NO_CRAWL = args.includes("--no-crawl");
 const BUDGET = flag("--budget") || (BACKFILL ? 30000 : 6000);
 const CONCURRENCY = flag("--concurrency") || 5;
 const DISCOVER_SHARE = 0.25;    // of the budget, for finding new leagues
@@ -87,7 +92,7 @@ function fitFormat(format, trades, prior, keep, asOf) {
   }
   const rows = M.scaleValues(fit, prior, keep);
   const tierOf = M.tiers(rows);
-  return { rows: rows.map((r, i) => ({ ...r, tier: tierOf[i] })), trades: usable.length, leagues: new Set(usable.map((t) => t.league)).size, building };
+  return { rows: rows.map((r, i) => ({ ...r, tier: tierOf[i] })), usable, trades: usable.length, leagues: new Set(usable.map((t) => t.league)).size, building };
 }
 
 async function main() {
@@ -106,10 +111,12 @@ async function main() {
     if (me) crawl.frontier.push(me.user_id);
   }
 
-  await crawler.discover(crawl, season, Math.round(BUDGET * DISCOVER_SHARE));
-  const order = Object.entries(crawl.leagues).sort((a, b) => a[1].at - b[1].at);
-  await crawler.pool(order, ([id, l]) => crawler.scanLeague(id, l, week, store));
-  if (BACKFILL) await crawler.backfillPrevious(crawl, store, SEASON_WEEKS + 1);
+  if (!NO_CRAWL) {
+    await crawler.discover(crawl, season, Math.round(BUDGET * DISCOVER_SHARE));
+    const order = Object.entries(crawl.leagues).sort((a, b) => a[1].at - b[1].at);
+    await crawler.pool(order, ([id, l]) => crawler.scanLeague(id, l, week, store));
+    if (BACKFILL) await crawler.backfillPrevious(crawl, store, SEASON_WEEKS + 1);
+  }
   console.log(`${crawler.spent()} requests. Trades: ${before} → ${Object.keys(store).length}`);
 
   const cutoff = Date.now() - KEEP_DAYS * DAY;
@@ -172,6 +179,9 @@ async function main() {
   C.writeIfChanged(OUT, "NFL_MARKET", { updatedOn: today, season, stats, values, model, trades: trades_, trends },
     { ...opts, compareOn: (d) => ({ values: d.values, stats: d.stats }) });
   C.writeIfChanged(HISTORY_OUT, "NFL_MARKET_HISTORY", history, opts);
+  const names = Object.fromEntries(Object.entries(players).map(([id, p]) => [id, p.name]));
+  const db = M.tradeDatabase(Object.fromEntries(M.FORMATS.map((f) => [f, fits[f].usable])), names, now);
+  C.writeIfChanged(DB_OUT, "NFL_TRADES", db, { ...opts, compareOn: (d) => d.trades });
   if (!DRY_RUN) {
     fs.mkdirSync(path.dirname(CRAWL), { recursive: true });
     fs.writeFileSync(CRAWL, JSON.stringify(crawl));

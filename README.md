@@ -84,6 +84,7 @@ The page is laid out like a website, themed as an **executive front office**
   | Boardroom | My Leagues |
   | War Room | Player Values (draft board and value list) |
   | Trade Desk | Trade Calculator |
+  | Trade Ledger | Trade Database |
   | Scouting Dept. | 2027 Rookie Class |
   | Player File | Player Profile (no nav entry; reached from player names) |
 
@@ -537,6 +538,24 @@ only) with dynasty value, for players worth at least 1,500:
 should buy), **Future** when it's under half and the player is 25 or younger
 (young stashes, and anyone out for the season).
 
+### Trade Database
+
+Every completed two-team trade the football Trade Market is fit from
+(`data/nfl-trades.js`, written by `scripts/refresh-nfl-market.js`; picks are
+stored by draft year, so a pick that's since been drafted shows as such),
+judged the way KTC's trade database does it: each asset at today's value in
+your format, through the Trade Calculator's formula in that trade's league
+size (or plain sums, with Raw values). Filter by window, shape (1 for 1,
+2 for 1, 3+ for 1, many for many), verdict and player, newest or most
+lopsided first, and open any trade in the calculator.
+
+The **Formula check** grades the formula against the market: real trades are
+deals both managers took, so a formula in line with them calls most of them
+close, and the side getting fewer pieces shouldn't come out ahead or behind
+on average. It shows, per shape, the share judged fair / slight / lopsided,
+the typical gap, and the median margin for the side getting fewer pieces,
+with the adjustments and on raw sums.
+
 ### Trade Calculator
 
 Add players or picks to what each team gets. Each side shows its plain value,
@@ -545,11 +564,11 @@ adjusted the way the big calculators do it (`evaluateTrade`, constants in
 `TRADE_FORMULA`):
 
 - **Stud adjustment** (like KeepTradeCut and DynastyDaddy): each asset
-  counts toward a "trade score" at 20% (filler) to 40% (the best player in
+  counts toward a "trade score" at 20% (filler) to 30% (the best player in
   the league) of its value. The share is higher the closer the asset is to
-  the best asset in the trade and in the league. The side with the lower
-  score is behind by the value of the one extra player it would need to catch
-  up, found by bisection as KTC does.
+  the best player in the league. The side with the lower score is behind by
+  the value of the one extra player it would need to catch up, found by
+  bisection as KTC does.
 - **Roster spot credit** (like FantasyCalc): the side getting fewer players
   can fill each open spot from waivers. So it's credited with the value of
   about the (teams × 25)th-best player, a slightly better one for each extra
@@ -557,11 +576,15 @@ adjusted the way the big calculators do it (`evaluateTrade`, constants in
   worth about 900, in 14 teams under 100. Bigger leagues credit less, so
   depth matters more.
 
-The constants were tuned against reference trades. A 2-for-1 of equal value
-favors the 1 side by about 15-20% in 12 teams, and four mid players don't
-beat a star on volume. That lands between FantasyCalc (credit only) and KTC
-(a much steeper stud premium). It's this app's own blend, not any one site's
-exact formula. Within 5% (or 250) is "fair", and up to 15% "slightly
+The constants are fit to real trades with the Trade Database's formula
+check: the stud adjustment used to also favor whichever asset was best in
+the trade (`trade: 0.1`), which had the calculator saying the side getting
+fewer pieces won the typical real 2-for-1 or 3-for-1 by about 20%. Without
+it, every trade shape in Superflex reads within about 4% (1QB still leans
+about 6% toward the side getting fewer pieces), and four mid players still
+don't beat a star on volume. Basketball keeps the original constants
+(`NBA_TRADE_FORMULA`) until they're checked against its own trades. It's
+this app's own blend, not any one site's exact formula. Within 5% (or 250) is "fair", and up to 15% "slightly
 favors". **Raw values** turns both adjustments off. A collapsible "How this
 is calculated" note on the page shows the current waiver-level player and
 value. "To even it out" re-runs the whole formula for every candidate to find

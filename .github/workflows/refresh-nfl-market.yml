@@ -35,7 +35,7 @@ jobs:
 
       - name: Commit if changed
         run: |
-          git add data/nfl-market.js data/nfl-market-history.js cache/nfl-market-crawl.json cache/nfl-trades.json
+          git add data/nfl-market.js data/nfl-market-history.js data/nfl-trades.js cache/nfl-market-crawl.json cache/nfl-trades.json
           if git diff --cached --quiet; then
             echo "No market changes."
             exit 0

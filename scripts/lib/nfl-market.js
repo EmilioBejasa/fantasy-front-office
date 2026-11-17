@@ -194,9 +194,33 @@ function pagePickValues(id, v, now) {
   };
 }
 
+// The Trade Database (data/nfl-trades.js): every trade the fit used, for the
+// page to browse and judge. usable: { format: [trade] } (cleanTrades' lists);
+// names: { id: name }. A trade is [ts, format index, league size, side A,
+// side B], newest first. Picks become their draft ("p2027-1"), since a
+// "pick-1-1" means a different draft depending on when it was traded.
+function tradeDatabase(usable, names, now = Date.now()) {
+  const asset = (id, ts) => {
+    if (!N.isPick(id)) return id;
+    const [, out, round] = id.split("-").map(Number);
+    return `p${nextDraftYear(ts) + out - 1}-${round}`;
+  };
+  const trades = [];
+  const seen = new Set();
+  for (const [format, list] of Object.entries(usable)) {
+    const f = FORMATS.indexOf(format);
+    if (f < 0) continue;
+    for (const t of list) trades.push([t.ts, f, t.size || 12, ...t.sides.map((s) => s.map((id) => asset(id, t.ts)))]);
+  }
+  trades.sort((a, b) => b[0] - a[0]);
+  for (const t of trades) for (const s of [t[3], t[4]]) for (const id of s) if (id[0] !== "p") seen.add(id);
+  const used = Object.fromEntries([...seen].sort().map((id) => [id, names[id] || "Unknown player"]));
+  return { updatedOn: new Date(now).toISOString().slice(0, 10), draftYear: nextDraftYear(now), formats: FORMATS, names: used, trades };
+}
+
 module.exports = {
   FORMATS, HALF_LIFE, ROUNDS, modeOf, leagueExtra, formatOf, draftsAway, parseTrade,
-  nextDraftYear, pickInfo, playerInputs, ageFactor, priorValues, pagePickValues,
+  nextDraftYear, pickInfo, playerInputs, ageFactor, priorValues, pagePickValues, tradeDatabase,
   // The fit is the basketball market's, unchanged.
   isPick: N.isPick, cleanTrades: N.cleanTrades, fitValues: N.fitValues, scaleValues: N.scaleValues, tiers: N.tiers, THIN: N.THIN,
 };

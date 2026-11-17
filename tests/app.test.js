@@ -687,3 +687,74 @@ test("seasonForm: per game, last three, projections beaten and games missed", ()
   assert.equal(f.best.week, 4);
   assert.equal(app.seasonForm([wk(1, null, 10)], 1), null);
 });
+
+// Trade Database: a few value rows, best first, plus generic pick rows.
+function tradeDbFixture() {
+  const rows = [
+    { id: "a", name: "Alpha Star", position: "WR", posRank: 1, value: 9000 },
+    { id: "b", name: "Bravo Two", position: "RB", posRank: 1, value: 4500 },
+    { id: "c", name: "Charlie Two", position: "WR", posRank: 2, value: 4500 },
+    { id: "d", name: "Delta", position: "TE", posRank: 1, value: 4000 },
+    { id: "fc-2027-1", name: "2027 1st", position: "PICK", value: 5000 },
+    ...curve.slice(10).map((v, i) => ({ id: `x${i}`, name: `Filler ${i}`, position: "WR", posRank: 10 + i, value: Math.round(v / 2) })),
+  ];
+  const day = 86400000, now = Date.UTC(2026, 10, 17);
+  const db = {
+    formats: ["dynasty-1qb", "dynasty-sf", "redraft-1qb", "redraft-sf"], names: { gone: "Old Vet" },
+    trades: [
+      [now - 1 * day, 1, 12, ["a"], ["b", "c"]],      // 2 for 1, equal sums
+      [now - 2 * day, 1, 12, ["d"], ["p2027-1"]],     // 1 for 1 with a future pick
+      [now - 3 * day, 1, 12, ["d"], ["p2026-1"]],     // a pick since drafted
+      [now - 4 * day, 1, 10, ["gone"], ["d"]],        // a player no longer listed
+      [now - 5 * day, 0, 12, ["a"], ["b"]],           // another format
+    ],
+  };
+  return { rows, db, now };
+}
+
+test("tradeDbRows: values each asset today and judges only trades it can value", () => {
+  const { rows, db, now } = tradeDbFixture();
+  const list = app.tradeDbRows(db, rows, "dynasty-sf", now);
+  assert.equal(list.length, 4);
+  const [two, pick, drafted, gone] = list;
+  assert.equal(two.shape, "2-1");
+  assert.equal(two.fewer, 0);
+  assert.equal(two.result.winner, 0); // equal sums, so the stud side wins once adjusted
+  assert.equal(two.rawResult.verdict, "fair");
+  assert.equal(pick.sides[1][0].rowId, "fc-2027-1");
+  assert.equal(pick.sides[1][0].value, 5000);
+  assert.equal(pick.fewer, -1);
+  assert.equal(drafted.judged, false);
+  assert.equal(drafted.sides[1][0].why, "drafted");
+  assert.equal(gone.sides[0][0].name, "Old Vet");
+  assert.equal(gone.sides[0][0].why, "unlisted");
+  assert.equal(gone.result, null);
+});
+
+test("tradeDbCheck and tradeDbView: shape summaries and filters", () => {
+  const { rows, db, now } = tradeDbFixture();
+  const list = app.tradeDbRows(db, rows, "dynasty-sf", now);
+  const check = plain(app.tradeDbCheck(list));
+  const all = check.find((c) => c.key === "all"), two = check.find((c) => c.key === "2-1");
+  assert.equal(all.n, 2); // unjudged trades are left out
+  assert.equal(two.n, 1);
+  assert.ok(two.lean > 0); // the calculator says the consolidating side wins
+  assert.equal(two.rawLean, 0);
+  assert.equal(check.find((c) => c.key === "1-1").lean, null);
+  assert.equal(app.tradeDbView(list, { query: "charlie" }).length, 1);
+  assert.equal(app.tradeDbView(list, { query: "2027 1st" }).length, 1);
+  assert.equal(app.tradeDbView(list, { shape: "1-1" }).length, 3);
+  assert.equal(app.tradeDbView(list, { verdict: "fair", raw: true }).length, 1);
+  assert.equal(app.tradeDbView(list, { sort: "lopsided" })[3].judged, false); // unjudged last
+});
+
+test("evaluateTrade: football's stud premium is league-wide only; basketball keeps the in-trade premium", () => {
+  // A 2-for-1 of mid players: no one in it is near the league's best.
+  const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());
+  const nba = app.evaluateTrade([[3000], [1500, 1500]], ctx(12, { formula: app.NBA_TRADE_FORMULA }));
+  assert.ok(nfl.stud[0] < 50, `football stud ${nfl.stud[0]}`);
+  assert.ok(nba.stud[0] > 300, `basketball stud ${nba.stud[0]}`);
+  // Four mid players still don't beat a star on volume.
+  const star = app.evaluateTrade([[9000], [2500, 2500, 2500, 2500]], ctx());
+  assert.equal(star.winner, 0);
+});

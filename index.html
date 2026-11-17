@@ -6439,21 +6439,28 @@ const nextRookieDraft = (now = Date.now()) => {
 //   fewer pieces, or -1), judged, result, rawResult }.
 // An asset is { id, rowId, name, position, posRank, team, value, why }; `why`
 // says why it has no value today ("drafted": a pick since used; "unlisted"),
-// and a trade with one isn't judged.
+// and a trade with one isn't judged. A pick with a known slot ("p2027-1-early",
+// from its original team's standing) is "2027 1st (Early)" at that slot's value.
 function tradeDbRows(db, rows, format, now = Date.now()) {
   if (!db?.trades) return [];
   const f = db.formats.indexOf(format);
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   const pickRow = pickLookup(rows);
+  const slotRows = {};
+  for (const r of rows) {
+    const p = r.position === "PICK" && window.FantasyCalc.parsePick(r.name);
+    if (p && p.slot) slotRows[`${p.year}-${p.round}-${p.slot}`] = r;
+  }
   const draft = nextRookieDraft(now);
   const playerValues = rows.filter((r) => r.position !== "PICK").map((r) => r.value);
   const topValue = rows[0]?.value || 1;
   const asset = (id) => {
     if (id[0] === "p") {
-      const [year, round] = id.slice(1).split("-").map(Number);
-      const name = `${year} ${ordinal(round)}`;
+      const [y, rd, slot] = id.slice(1).split("-");
+      const year = Number(y), round = Number(rd);
+      const name = `${year} ${ordinal(round)}${slot ? ` (${slot[0].toUpperCase()}${slot.slice(1)})` : ""}`;
       if (year < draft) return { id, name, position: "PICK", value: 0, why: "drafted" };
-      const r = pickRow(year, round);
+      const r = (slot && slotRows[`${year}-${round}-${slot}`]) || pickRow(year, round);
       return r ? { id, rowId: r.id, name, position: "PICK", value: r.value } : { id, name, position: "PICK", value: 0, why: "unlisted" };
     }
     const r = byId[id];
@@ -6619,7 +6626,10 @@ function TradeDatabase({ data, settings, setSettings }) {
         <AboutData>
           These are the completed two-team trades the Trade Market's values are fit from{db?.updatedOn ? ` (updated ${db.updatedOn})` : ""}:
           giant, wildly lopsided and roster-dump trades are already left out, and one busy league can't flood the list. Sleeper
-          doesn't say where a future pick will land, so picks show as the year and round. The formula check judges each trade
+          doesn't say where a future pick will land, so the next draft's picks are marked early, mid or late from their original
+          team's standing when the trade was collected (that league's final standings for offseason trades, once teams have
+          played four games in season); picks further out, and trades collected before November 17, 2026, show just the year
+          and round. The formula check judges each trade
           like the Trade Calculator would today, in that trade's league size; values have moved since older trades were made, so
           a shorter window is a fairer test. Trades with a pick that's since been drafted, or a player the values no longer list,
           are left out of it. <DynastyStatusLine data={data} />

@@ -546,7 +546,15 @@ stored by draft year, so a pick that's since been drafted shows as such),
 listed newest first with the date and time, league size and what each side
 got. Filter by window, shape (1 for 1, 2 for 1, 3+ for 1, many for many) and
 player or pick, and open any trade in the calculator. Sleeper doesn't say
-where a future pick will land, so picks show as the year and round.
+where a future pick will land, but each traded pick names its original team,
+so the crawl marks the next draft's picks early, mid or late (thirds of the
+league) from that team's standing as the trade is first read: the league's
+final standings for offseason trades (the previous season's league once it's
+been renewed), its standings so far in season once teams average four games
+(`pickSlots`, `addPickSlots` in lib/nfl-market.js; one rosters request per
+league per run with such trades). Picks further out, and trades collected
+before this started, show just the year and round. The market still fits
+one value per round; slots only label the trades so far.
 
 The **Formula check** judges each trade the way KTC's trade database does
 (each asset at today's value in your format, through the Trade Calculator's

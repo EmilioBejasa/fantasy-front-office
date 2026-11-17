@@ -316,3 +316,34 @@ test("nfl-market tradeDatabase: newest first, picks become their draft year, nam
   ]);
   assert.deepEqual(db.names, { 100: "A", 200: "B", 300: "Unknown player" });
 });
+
+test("nfl-market pick slots: thirds by record, the right season's standings, one request per league", async () => {
+  const roster = (id, wins, losses, fpts) => ({ roster_id: id, settings: { wins, losses, ties: 0, fpts } });
+  const rosters = [roster(1, 8, 2, 1500), roster(2, 2, 8, 1100), roster(3, 5, 5, 1300), roster(4, 5, 5, 1200), roster(5, 7, 3, 1400), roster(6, 3, 7, 1000)];
+  assert.deepEqual(nfl.pickSlots(rosters), { 6: "early", 2: "early", 4: "mid", 3: "mid", 5: "late", 1: "late" });
+  assert.equal(nfl.pickSlots(rosters.map((r) => roster(r.roster_id, 1, 1, 100))), null); // too early in the season
+
+  const league = { id: "L", type: 2, size: 12, season: "2026", qb: "sf", tep: 0, prev: "P" };
+  assert.equal(nfl.slotLeague(league, Date.UTC(2026, 3, 1)), "P"); // renewed, before its draft: last season's final standings
+  assert.equal(nfl.slotLeague(league, Date.UTC(2026, 10, 1)), "L"); // in season
+  assert.equal(nfl.slotLeague({ ...league, season: "2025" }, Date.UTC(2026, 1, 1)), "L"); // offseason, not yet renewed
+
+  const tx = { type: "trade", status: "complete", transaction_id: 9, status_updated: Date.UTC(2026, 10, 1), roster_ids: [1, 2], adds: { 100: 1 },
+    draft_picks: [{ season: "2027", round: 1, roster_id: 6, owner_id: 2 }, { season: "2028", round: 1, roster_id: 1, owner_id: 2 }] };
+  const t = nfl.parseTrade(tx, league);
+  assert.deepEqual(t.sides, [["100"], ["pick-1-1", "pick-2-1"]]);
+  assert.deepEqual(t.picks, [[1, 0, 6]]); // only the next draft's pick
+  const calls = [];
+  const get = async (url) => { calls.push(url); return rosters; };
+  const cache = new Map();
+  await nfl.addPickSlots(t, league, get, cache);
+  assert.deepEqual(t.slots, [[null], ["early", null]]);
+  const again = nfl.parseTrade(tx, league);
+  await nfl.addPickSlots(again, league, get, cache);
+  assert.deepEqual(calls, ["/league/L/rosters"]);
+  const kept = nfl.parseTrade(tx, league);
+  await nfl.addPickSlots(kept, league, async () => { throw new Error("no request"); }, new Map(), { slots: [[null], ["late", null]] });
+  assert.deepEqual(kept.slots, [[null], ["late", null]]); // the stored slot stays
+  const db = nfl.tradeDatabase({ "dynasty-sf": [t] }, {}, Date.UTC(2026, 10, 17));
+  assert.deepEqual(db.trades[0][4], ["p2027-1-early", "p2028-1"]);
+});

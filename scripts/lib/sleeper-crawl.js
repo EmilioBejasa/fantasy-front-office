@@ -6,7 +6,8 @@
 // createCrawler({ sport, budget, parseTrade, ... }) returns the
 // request-spending helpers, sharing one request budget (about five a second
 // by default, well under Sleeper's 1000 a minute). Discovery stops adding
-// leagues at maxLeagues.
+// leagues at maxLeagues. `enrich(trade, league, get, old)`, if given, runs on
+// each trade read (async, with the stored copy as `old`) before it's stored.
 
 const fs = require("fs");
 const path = require("path");
@@ -28,7 +29,7 @@ const leagueMeta = (l, extra) => ({
   scanned: -1, at: 0, ...(extra ? extra(l) : {}),
 });
 
-function createCrawler({ sport, budget, parseTrade, leagueExtra, concurrency = CONCURRENCY, maxLeagues = Infinity }) {
+function createCrawler({ sport, budget, parseTrade, leagueExtra, enrich, concurrency = CONCURRENCY, maxLeagues = Infinity }) {
   let spent = 0;
 
   async function get(url) {
@@ -112,6 +113,7 @@ function createCrawler({ sport, budget, parseTrade, leagueExtra, concurrency = C
       if (txs === undefined) return; // out of budget: pick up here next time
       for (const tx of txs || []) {
         const t = parseTrade(tx, { ...l, id });
+        if (t && enrich) await enrich(t, { ...l, id }, get, store[t.id]);
         if (t) store[t.id] = t;
       }
       l.scanned = w;

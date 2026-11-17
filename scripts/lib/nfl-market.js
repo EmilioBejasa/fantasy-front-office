@@ -14,7 +14,13 @@
 // many rookie drafts away they were when traded ("pick-1-1" is the next
 // draft's 1st), so last season's trades count for this year's picks too.
 //
-// Plain functions with no network, so tests can run them.
+// Sleeper trades don't say where a pick will land, but each traded pick names
+// the team it originally belonged to, so the next draft's picks get a slot
+// (early, mid or late) from that team's standing: pickSlots, run by the crawl
+// as each trade is first read (see addPickSlots).
+//
+// Plain functions with no network (but addPickSlots, given a getter), so
+// tests can run them.
 
 const N = require("./nba-market");
 
@@ -63,12 +69,16 @@ function parseTrade(tx, league) {
   const ts = tx.status_updated || tx.created;
   const sides = rosters.map((r) => ({ roster: r, ids: [] }));
   const side = (r) => sides.find((s) => s.roster === r);
+  const picks = []; // the next draft's picks: [side, index in side, original roster]
   for (const [pid, r] of Object.entries(tx.adds || {})) side(r)?.ids.push(String(pid));
   if (modeOf(format) === "dynasty") {
     for (const p of tx.draft_picks || []) {
       const out = draftsAway(p.season, league.season, ts);
       if (out < 1 || out > 3 || !(p.round >= 1 && p.round <= ROUNDS)) continue;
-      side(p.owner_id)?.ids.push(N.pickKey(out, p.round));
+      const s = side(p.owner_id);
+      if (!s) continue;
+      if (out === 1 && p.roster_id != null) picks.push([sides.indexOf(s), s.ids.length, p.roster_id]);
+      s.ids.push(N.pickKey(out, p.round));
     }
   }
   let weight = league.type === 1 ? KEEPER_WEIGHT : 1;
@@ -77,7 +87,58 @@ function parseTrade(tx, league) {
     id: String(tx.transaction_id), ts, format, weight,
     league: String(league.id), size: league.size || 12, season: String(league.season),
     sides: sides.map((s) => s.ids),
+    ...(picks.length ? { picks } : {}),
   };
+}
+
+// Draft slot by roster from a league's rosters (Sleeper /league/:id/rosters):
+// { roster_id: "early" | "mid" | "late" }, worst record (then fewest points)
+// first, in thirds. null until the teams average MIN_GAMES games, when the
+// standings don't say much yet.
+const MIN_GAMES = 4;
+function pickSlots(rosters) {
+  const list = (rosters || []).filter((r) => r && r.roster_id != null);
+  if (list.length < 3) return null;
+  const st = (r) => r.settings || {};
+  const games = (r) => (st(r).wins || 0) + (st(r).losses || 0) + (st(r).ties || 0);
+  if (list.reduce((s, r) => s + games(r), 0) / list.length < MIN_GAMES) return null;
+  const score = (r) => (st(r).wins || 0) + (st(r).ties || 0) / 2;
+  const pts = (r) => (st(r).fpts || 0) + (st(r).fpts_decimal || 0) / 100;
+  const order = [...list].sort((a, b) => score(a) - score(b) || pts(a) - pts(b));
+  const n = order.length;
+  return Object.fromEntries(order.map((r, i) => [r.roster_id, i < n / 3 ? "early" : i < (2 * n) / 3 ? "mid" : "late"]));
+}
+
+// Whose standings set the next draft's order for a trade in this league:
+// before that season's rookie draft in a league already renewed for it, the
+// previous season's league (its final standings); otherwise this league (its
+// standings so far, or its final ones in the offseason before renewal).
+function slotLeague(league, ts) {
+  const beforeDraft = new Date(ts).getUTCFullYear() === Number(league.season) && new Date(ts).getUTCMonth() < DRAFT_MONTH;
+  return beforeDraft ? league.prev || null : String(league.id);
+}
+
+// Fills in trade.slots ([[slot or null per asset], …], parallel to sides)
+// for the next draft's picks. get(url) is the crawl's Sleeper getter;
+// `cache` (one per run) keeps each league's slots, so a league costs one
+// request however many trades it has. `old` is the stored copy of this
+// trade, whose slots are kept: they were read nearer the trade.
+async function addPickSlots(trade, league, get, cache, old) {
+  if (!trade.picks) return trade;
+  if (old?.slots) { trade.slots = old.slots; return trade; }
+  const from = slotLeague(league, trade.ts);
+  if (!from) return trade;
+  if (!cache.has(from)) {
+    const rosters = await get(`/league/${from}/rosters`);
+    if (rosters === undefined) return trade; // out of budget: try again next run
+    cache.set(from, pickSlots(rosters));
+  }
+  const slots = cache.get(from);
+  if (!slots) return trade;
+  const out = trade.sides.map((s) => s.map(() => null));
+  for (const [si, i, roster] of trade.picks) if (slots[roster]) out[si][i] = slots[roster];
+  if (out.some((s) => s.some(Boolean))) trade.slots = out;
+  return trade;
 }
 
 // The year of the next rookie draft, as of `now`.
@@ -198,19 +259,20 @@ function pagePickValues(id, v, now) {
 // page to browse and judge. usable: { format: [trade] } (cleanTrades' lists);
 // names: { id: name }. A trade is [ts, format index, league size, side A,
 // side B], newest first. Picks become their draft ("p2027-1"), since a
-// "pick-1-1" means a different draft depending on when it was traded.
+// "pick-1-1" means a different draft depending on when it was traded, plus
+// the slot when it's known ("p2027-1-early").
 function tradeDatabase(usable, names, now = Date.now()) {
-  const asset = (id, ts) => {
+  const asset = (id, ts, slot) => {
     if (!N.isPick(id)) return id;
     const [, out, round] = id.split("-").map(Number);
-    return `p${nextDraftYear(ts) + out - 1}-${round}`;
+    return `p${nextDraftYear(ts) + out - 1}-${round}${slot ? `-${slot}` : ""}`;
   };
   const trades = [];
   const seen = new Set();
   for (const [format, list] of Object.entries(usable)) {
     const f = FORMATS.indexOf(format);
     if (f < 0) continue;
-    for (const t of list) trades.push([t.ts, f, t.size || 12, ...t.sides.map((s) => s.map((id) => asset(id, t.ts)))]);
+    for (const t of list) trades.push([t.ts, f, t.size || 12, ...t.sides.map((s, si) => s.map((id, i) => asset(id, t.ts, t.slots?.[si]?.[i])))]);
   }
   trades.sort((a, b) => b[0] - a[0]);
   for (const t of trades) for (const s of [t[3], t[4]]) for (const id of s) if (id[0] !== "p") seen.add(id);
@@ -221,6 +283,7 @@ function tradeDatabase(usable, names, now = Date.now()) {
 module.exports = {
   FORMATS, HALF_LIFE, ROUNDS, modeOf, leagueExtra, formatOf, draftsAway, parseTrade,
   nextDraftYear, pickInfo, playerInputs, ageFactor, priorValues, pagePickValues, tradeDatabase,
+  pickSlots, slotLeague, addPickSlots,
   // The fit is the basketball market's, unchanged.
   isPick: N.isPick, cleanTrades: N.cleanTrades, fitValues: N.fitValues, scaleValues: N.scaleValues, tiers: N.tiers, THIN: N.THIN,
 };

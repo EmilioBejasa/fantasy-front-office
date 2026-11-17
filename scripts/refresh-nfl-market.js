@@ -56,8 +56,12 @@ const DAY = C.DAY;
 const HISTORY_FORMATS = ["dynasty-1qb", "dynasty-sf"];
 
 const today = new Date().toISOString().slice(0, 10);
+// The next draft's picks get a slot from their original team's standing
+// (one rosters request per league per run, for leagues with such trades).
+const slotCache = new Map();
 const crawler = C.createCrawler({
   sport: "nfl", budget: BUDGET, parseTrade: M.parseTrade, leagueExtra: M.leagueExtra,
+  enrich: (t, league, get, old) => M.addPickSlots(t, league, get, slotCache, old),
   concurrency: CONCURRENCY, maxLeagues: MAX_LEAGUES,
 });
 

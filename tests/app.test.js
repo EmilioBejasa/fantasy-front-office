@@ -696,6 +696,7 @@ function tradeDbFixture() {
     { id: "c", name: "Charlie Two", position: "WR", posRank: 2, value: 4500 },
     { id: "d", name: "Delta", position: "TE", posRank: 1, value: 4000 },
     { id: "fc-2027-1", name: "2027 1st", position: "PICK", value: 5000 },
+    { id: "fc-2027-1e", name: "2027 1st (Early)", position: "PICK", value: 6500 },
     ...curve.slice(10).map((v, i) => ({ id: `x${i}`, name: `Filler ${i}`, position: "WR", posRank: 10 + i, value: Math.round(v / 2) })),
   ];
   const day = 86400000, now = Date.UTC(2026, 10, 17);
@@ -707,6 +708,7 @@ function tradeDbFixture() {
       [now - 3 * day, 1, 12, ["d"], ["p2026-1"]],     // a pick since drafted
       [now - 4 * day, 1, 10, ["gone"], ["d"]],        // a player no longer listed
       [now - 5 * day, 0, 12, ["a"], ["b"]],           // another format
+      [now - 6 * day, 1, 12, ["c"], ["p2027-1-early"]], // a pick with a known slot
     ],
   };
   return { rows, db, now };
@@ -715,8 +717,10 @@ function tradeDbFixture() {
 test("tradeDbRows: values each asset today and judges only trades it can value", () => {
   const { rows, db, now } = tradeDbFixture();
   const list = app.tradeDbRows(db, rows, "dynasty-sf", now);
-  assert.equal(list.length, 4);
-  const [two, pick, drafted, gone] = list;
+  assert.equal(list.length, 5);
+  const [two, pick, drafted, gone, slotted] = list;
+  assert.equal(slotted.sides[1][0].name, "2027 1st (Early)");
+  assert.equal(slotted.sides[1][0].rowId, "fc-2027-1e");
   assert.equal(two.shape, "2-1");
   assert.equal(two.fewer, 0);
   assert.equal(two.result.winner, 0); // equal sums, so the stud side wins once adjusted
@@ -736,14 +740,15 @@ test("tradeDbCheck and tradeDbView: shape summaries and filters", () => {
   const list = app.tradeDbRows(db, rows, "dynasty-sf", now);
   const check = plain(app.tradeDbCheck(list));
   const all = check.find((c) => c.key === "all"), two = check.find((c) => c.key === "2-1");
-  assert.equal(all.n, 2); // unjudged trades are left out
+  assert.equal(all.n, 3); // unjudged trades are left out
   assert.equal(two.n, 1);
   assert.ok(two.lean > 0); // the calculator says the consolidating side wins
   assert.equal(two.rawLean, 0);
   assert.equal(check.find((c) => c.key === "1-1").lean, null);
-  assert.equal(app.tradeDbView(list, { query: "charlie" }).length, 1);
-  assert.equal(app.tradeDbView(list, { query: "2027 1st" }).length, 1);
-  assert.equal(app.tradeDbView(list, { shape: "1-1" }).length, 3);
+  assert.equal(app.tradeDbView(list, { query: "charlie" }).length, 2);
+  assert.equal(app.tradeDbView(list, { query: "2027 1st" }).length, 2);
+  assert.equal(app.tradeDbView(list, { query: "early" }).length, 1);
+  assert.equal(app.tradeDbView(list, { shape: "1-1" }).length, 4);
   assert.deepEqual(plain(app.tradeDbView(list).map((t) => t.ts)), plain(list.map((t) => t.ts))); // newest first
 });
 

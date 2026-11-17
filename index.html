@@ -6420,8 +6420,6 @@ const TRADE_DB_SHAPES = [
   { key: "all", label: "All" }, { key: "1-1", label: "1 for 1" }, { key: "2-1", label: "2 for 1" },
   { key: "3-1", label: "3+ for 1" }, { key: "multi", label: "Many for many" },
 ];
-const TRADE_DB_VERDICTS = [{ key: "all", label: "All" }, { key: "fair", label: "Fair" }, { key: "slight", label: "Slight edge" }, { key: "favors", label: "Lopsided" }];
-const TRADE_DB_SORTS = [{ key: "new", label: "Newest" }, { key: "lopsided", label: "Most lopsided" }];
 
 function tradeShape(a, b) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
@@ -6505,16 +6503,12 @@ function tradeDbCheck(list) {
   });
 }
 
-// The trades to list: filtered by shape, verdict (on the adjusted or raw
-// result) and a player or pick name, newest or most lopsided first.
-function tradeDbView(list, { shape = "all", verdict = "all", query = "", sort = "new", raw = false } = {}) {
+// The trades to list, newest first: filtered by shape and a player or pick name.
+function tradeDbView(list, { shape = "all", query = "" } = {}) {
   const q = foldName(query.trim());
-  const res = (t) => (raw ? t.rawResult : t.result);
-  const shown = list.filter((t) =>
+  return list.filter((t) =>
     (shape === "all" || t.shape === shape) &&
-    (verdict === "all" || res(t)?.verdict === verdict) &&
     (!q || t.sides.some((s) => s.some((a) => foldName(a.name).includes(q)))));
-  return sort === "lopsided" ? [...shown].sort((a, b) => (res(b)?.pct ?? -1) - (res(a)?.pct ?? -1)) : shown;
 }
 
 const fmtShare = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
@@ -6570,38 +6564,30 @@ function TradeDbCheck({ check }) {
   );
 }
 
-function TradeDbCard({ t, raw }) {
-  const r = raw ? t.rawResult : t.result;
-  const why = t.sides.flat().some((a) => a.why === "drafted") ? "includes a pick that's since been drafted" : "includes a player no longer listed";
-  const verdict = !r ? "Can't judge today" : r.verdict === "fair" ? "Fair today" : `Side ${TRADE_SIDES[r.winner]} wins by ${Math.round(r.pct * 100)}%`;
+// One trade: when it happened, the league size, and what each side got.
+function TradeDbCard({ t }) {
   const link = t.judged && `#trade=${t.sides.map((s) => s.map((a) => encodeURIComponent(a.rowId)).join(",")).join("|")}`;
+  const when = new Date(t.ts);
   return (
     <div className="rounded-lg border p-3 flex flex-col gap-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
       <div className="flex justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-        <span>{new Date(t.ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · {t.size}-team</span>
-        <span className="font-semibold" style={{ color: !r || r.verdict === "fair" ? "var(--text-muted)" : SIDE_COLOR[TRADE_SIDES[r.winner]] }}
-          title={!r ? `This trade ${why}` : undefined}>{verdict}</span>
+        <span>
+          {when.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+          {" · "}{when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <span>{t.size}-team</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {t.sides.map((s, si) => (
           <ul key={si} className="flex flex-col gap-0.5 min-w-0">
             <li className="text-xs font-semibold" style={{ color: SIDE_COLOR[TRADE_SIDES[si]] }}>Side {TRADE_SIDES[si]} gets</li>
             {s.map((a, ai) => (
-              <li key={ai} className="flex justify-between gap-2 min-w-0">
-                <span className="truncate">
-                  {a.why ? <span style={{ color: "var(--text-muted)" }}>{a.name}</span> : <PlayerLink id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}
-                  {a.position && a.position !== "PICK" && <span className="text-xs ml-1" style={{ color: "var(--text-muted)" }}>{a.position}{a.posRank}</span>}
-                </span>
-                <span className="tabular-nums text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>{a.why ? "–" : fmtValue(a.value)}</span>
+              <li key={ai} className="truncate">
+                {a.why ? <span style={{ color: "var(--text-muted)" }}>{a.name}</span> : <PlayerLink id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}
+                {a.position && a.position !== "PICK" && <span className="text-xs ml-1" style={{ color: "var(--text-muted)" }}>{a.position}{a.posRank}</span>}
+                {a.why === "drafted" && <span className="text-xs ml-1" style={{ color: "var(--text-muted)" }}>(since drafted)</span>}
               </li>
             ))}
-            {r && (
-              <li className="flex justify-between gap-2 border-t mt-1 pt-1 text-xs" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
-                title={r.stud[si] || r.credit[si] ? `Includes ${fmtValue(Math.round(r.stud[si]))} stud adjustment and ${fmtValue(Math.round(r.credit[si]))} roster spot credit` : undefined}>
-                <span>Total{r.stud[si] || r.credit[si] ? " (adj.)" : ""}</span>
-                <span className="tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{fmtValue(Math.round(r.adjusted[si]))}</span>
-              </li>
-            )}
           </ul>
         ))}
       </div>
@@ -6614,41 +6600,33 @@ function TradeDatabase({ data, settings, setSettings }) {
   const db = useDataFile(loadNflTrades);
   const [days, setDays] = useState(90);
   const [shape, setShape] = useState("all");
-  const [verdict, setVerdict] = useState("all");
-  const [sort, setSort] = useState("new");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(TRADE_DB_PAGE);
   const format = `${settings.mode}-${settings.qb}`;
   const all = useMemo(() => tradeDbRows(db, data.rows, format), [db, data.rows, format]);
   const recent = useMemo(() => { const since = Date.now() - days * DAY_MS; return all.filter((t) => t.ts >= since); }, [all, days]);
   const check = useMemo(() => tradeDbCheck(recent), [recent]);
-  const shown = useMemo(() => tradeDbView(recent, { shape, verdict, query, sort, raw: settings.raw }), [recent, shape, verdict, query, sort, settings.raw]);
-  useEffect(() => { setLimit(TRADE_DB_PAGE); }, [format, days, shape, verdict, query, sort]);
-  const unjudged = recent.filter((t) => !t.judged).length;
+  const shown = useMemo(() => tradeDbView(recent, { shape, query }), [recent, shape, query]);
+  useEffect(() => { setLimit(TRADE_DB_PAGE); }, [format, days, shape, query]);
 
   return (
     <div className="flex flex-col gap-5">
       <header>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Trade Database</h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-          Real trades from public Sleeper {describeSettings(settings)} leagues, and who wins each one at today's values.
+          Real trades from public Sleeper {describeSettings(settings)} leagues, newest first.
         </p>
         <AboutData>
           These are the completed two-team trades the Trade Market's values are fit from{db?.updatedOn ? ` (updated ${db.updatedOn})` : ""}:
-          giant, wildly lopsided and roster-dump trades are already left out, and one busy league can't flood the list. Each trade
-          is judged like the Trade Calculator would judge it today, in that trade's league size, with its stud adjustment and roster
-          spot credit (or plain sums, with Raw values). Values have moved since older trades were made, so a shorter window is a
-          fairer test of the formula. Future picks use the generic pick's value; a pick that's since been drafted, or a player
-          the values no longer list, can't be judged today. <DynastyStatusLine data={data} />
+          giant, wildly lopsided and roster-dump trades are already left out, and one busy league can't flood the list. Sleeper
+          doesn't say where a future pick will land, so picks show as the year and round. The formula check judges each trade
+          like the Trade Calculator would today, in that trade's league size; values have moved since older trades were made, so
+          a shorter window is a fairer test. Trades with a pick that's since been drafted, or a player the values no longer list,
+          are left out of it. <DynastyStatusLine data={data} />
         </AboutData>
       </header>
 
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <LeagueSettings settings={settings} setSettings={setSettings} fields={["mode", "qb", "tep"]} />
-        <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
-          className="pill text-xs rounded-full px-3 py-1 font-medium" aria-pressed={settings.raw}
-          title="Judge trades on plain sums of values, with no stud adjustment or roster spot credit">Raw values</button>
-      </div>
+      <LeagueSettings settings={settings} setSettings={setSettings} fields={["mode", "qb", "tep"]} />
 
       {db === undefined && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading trades…</p>}
       {db === null && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>The trade database isn't available right now.</p>}
@@ -6662,8 +6640,6 @@ function TradeDatabase({ data, settings, setSettings }) {
           <TradeDbCheck check={check} />
 
           <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-            <LabeledControl label="Verdict"><PillGroup options={TRADE_DB_VERDICTS} value={verdict} onChange={setVerdict} /></LabeledControl>
-            <LabeledControl label="Sort"><PillGroup options={TRADE_DB_SORTS} value={sort} onChange={setSort} /></LabeledControl>
             <LabeledControl label="Search">
               <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Player or pick (2027 1st)"
                 aria-label="Search trades" className="rounded-md border px-3 py-1.5 text-sm w-56" style={inputStyle} />
@@ -6672,14 +6648,13 @@ function TradeDatabase({ data, settings, setSettings }) {
 
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             {shown.length.toLocaleString()} of {recent.length.toLocaleString()} {format.replace("-", " ").replace("sf", "Superflex").replace("1qb", "1QB")} trades
-            {unjudged ? ` · ${unjudged.toLocaleString()} can't be judged today` : ""}
           </p>
 
           {recent.length === 0 ? (
             <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>No trades in this format in that window yet.</p>
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
-              {shown.slice(0, limit).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} raw={settings.raw} />)}
+              {shown.slice(0, limit).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} />)}
             </div>
           )}
           {shown.length > limit && (
@@ -10264,7 +10239,7 @@ const PAGES = [
   { key: "trade", sport: "nfl", label: "Trade Calculator", short: "Trade Desk", hash: "#/trade", group: "Dynasty",
     blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, starting from this month's biggest risers and fallers." },
   { key: "trade-db", sport: "nfl", label: "Trade Database", short: "Trade Ledger", hash: "#/trades", group: "Dynasty",
-    blurb: "Thousands of real Sleeper trades, who wins each at today's values, and how well the trade formula matches what managers pay." },
+    blurb: "Thousands of real Sleeper trades, newest first and searchable by player or pick, plus how well the trade formula matches what managers pay." },
   { key: "class2027", sport: "nfl", label: "2027 Rookie Class", short: "Scouting Dept.", hash: "#/2027", group: "Dynasty",
     blurb: "The top prospects for next year's rookie drafts, and what a 2027 pick is worth right now." },
   { key: "prospect", sport: "nfl", label: "Prospect Profile", short: "Prospect File", hash: "#/prospect/", hidden: true },

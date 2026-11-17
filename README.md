@@ -543,13 +543,14 @@ should buy), **Future** when it's under half and the player is 25 or younger
 Every completed two-team trade the football Trade Market is fit from
 (`data/nfl-trades.js`, written by `scripts/refresh-nfl-market.js`; picks are
 stored by draft year, so a pick that's since been drafted shows as such),
-judged the way KTC's trade database does it: each asset at today's value in
-your format, through the Trade Calculator's formula in that trade's league
-size (or plain sums, with Raw values). Filter by window, shape (1 for 1,
-2 for 1, 3+ for 1, many for many), verdict and player, newest or most
-lopsided first, and open any trade in the calculator.
+listed newest first with the date and time, league size and what each side
+got. Filter by window, shape (1 for 1, 2 for 1, 3+ for 1, many for many) and
+player or pick, and open any trade in the calculator. Sleeper doesn't say
+where a future pick will land, so picks show as the year and round.
 
-The **Formula check** grades the formula against the market: real trades are
+The **Formula check** judges each trade the way KTC's trade database does
+(each asset at today's value in your format, through the Trade Calculator's
+formula in that trade's league size) to grade the formula against the market: real trades are
 deals both managers took, so a formula in line with them calls most of them
 close, and the side getting fewer pieces shouldn't come out ahead or behind
 on average. It shows, per shape, the share judged fair / slight / lopsided,

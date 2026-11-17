@@ -744,8 +744,7 @@ test("tradeDbCheck and tradeDbView: shape summaries and filters", () => {
   assert.equal(app.tradeDbView(list, { query: "charlie" }).length, 1);
   assert.equal(app.tradeDbView(list, { query: "2027 1st" }).length, 1);
   assert.equal(app.tradeDbView(list, { shape: "1-1" }).length, 3);
-  assert.equal(app.tradeDbView(list, { verdict: "fair", raw: true }).length, 1);
-  assert.equal(app.tradeDbView(list, { sort: "lopsided" })[3].judged, false); // unjudged last
+  assert.deepEqual(plain(app.tradeDbView(list).map((t) => t.ts)), plain(list.map((t) => t.ts))); // newest first
 });
 
 test("evaluateTrade: football's stud premium is league-wide only; basketball keeps the in-trade premium", () => {

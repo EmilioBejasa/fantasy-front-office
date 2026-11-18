@@ -763,6 +763,52 @@ test("tradeDbCheck and tradeDbView: shape summaries and filters", () => {
   assert.deepEqual(plain(app.tradeDbView(list).map((t) => t.ts)), plain(list.map((t) => t.ts))); // newest first
 });
 
+test("tradeDbRows days and judge: a recent window without verdicts", () => {
+  const { rows, db, now } = tradeDbFixture();
+  const recent = app.tradeDbRows(db, rows, "dynasty-sf", now, { days: 3.5, judge: false });
+  assert.equal(recent.length, 3);
+  assert.equal(recent[0].result, null);
+  assert.equal(recent[0].judged, true);
+});
+
+test("tradeDbComparables: most overlap first, sides turned to match the desk", () => {
+  const { rows, db, now } = tradeDbFixture();
+  const list = app.tradeDbRows(db, rows, "dynasty-sf", now, { judge: false });
+  // The desk: Team A gets d, Team B gets the 2027 1st.
+  const r = plain(app.tradeDbComparables(list, [["d"], ["fc-2027-1"]]));
+  assert.equal(r.total, 3);                       // every trade with d or that pick
+  assert.equal(r.trades[0].matched, 2);           // d for the 2027 1st first
+  assert.deepEqual(r.trades[0].sides.map((s) => s.map((a) => a.id)), [["d"], ["p2027-1"]]);
+  // Turned around: the desk has d on Team B, so the trade's d side is Side B.
+  const flipped = plain(app.tradeDbComparables(list, [["fc-2027-1"], ["d"]]));
+  assert.deepEqual(flipped.trades[0].sides.map((s) => s.map((a) => a.id)), [["p2027-1"], ["d"]]);
+  assert.deepEqual(r.keys, [{ key: "d", name: "Delta" }, { key: "p2027-1", name: "2027 1st" }]);
+  assert.equal(app.tradeDbComparables(list, [["nobody"], []]).total, 0);
+});
+
+test("Trade Ledger links: a search after ?with=, routed to the ledger", () => {
+  assert.equal(app.tradeDbHash("nfl", ["4046", "p2027-1"]), "#/trades?with=4046,p2027-1");
+  assert.equal(app.tradeDbHash("nba"), "#/nba/trades");
+  assert.deepEqual(plain(app.readTradeDbKeys("#/nba/trades?with=1,p2027-1")), ["1", "p2027-1"]);
+  assert.deepEqual(plain(app.readTradeDbKeys("#/trades")), []);
+  assert.equal(app.pageFromHash("#/trades?with=4046"), "trade-db");
+  assert.equal(app.pageFromHash("#/nba/trades?with=1"), "nba-trade-db");
+  assert.equal(app.tradeDbKeyName("p2027-2-late", {}), "2027 2nd (Late)");
+});
+
+test("basketball trade links carry their market values (~dynasty)", () => {
+  app.location.hash = "#nbatrade=1,2|pick-1-1~dynasty";
+  assert.deepEqual(plain(app.readTradeHash("nbatrade")), [["1", "2"], ["pick-1-1"]]);
+  assert.equal(app.readTradeHashValues("nbatrade"), "dynasty");
+  app.location.hash = "#nbatrade=1|2";
+  assert.deepEqual(plain(app.readTradeHash("nbatrade")), [["1"], ["2"]]);
+  assert.equal(app.readTradeHashValues("nbatrade"), null);
+  const t = { sides: [[{ rowId: "1" }], [{ rowId: "pick-1-1" }]] };
+  assert.equal(app.tradeDeskLink(t, "nba", "redraft"), "#nbatrade=1|pick-1-1~redraft");
+  assert.equal(app.tradeDeskLink({ sides: [[{ rowId: "a" }], [{ id: "gone" }]] }, "nfl"), null);
+  app.location.hash = "";
+});
+
 test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());

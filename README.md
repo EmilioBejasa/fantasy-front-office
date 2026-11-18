@@ -544,11 +544,15 @@ Every completed two-team trade the football Trade Market is fit from
 (`data/nfl-trades.js`, written by `scripts/refresh-nfl-market.js`; picks are
 stored by draft year, so a pick that's since been drafted shows as such),
 listed newest first with the date and time, league size and what each side
-got. Filter by window, shape (1 for 1, 2 for 1, 3+ for 1, many for many) and
-players and picks: the search's dropdown lists every one in those trades,
-most traded first, with picks by round in any slot ("2027 1st") or by slot;
-choose several (a trade must have all of them, on either side) and take any
-out again with its ✕. Open any trade in the calculator. Sleeper doesn't say
+got. The page shows the last 30 days (`TRADE_DB_DAYS`) in your format, each
+player and pick at today's value with each side's plain total (no stud
+adjustment or roster spot credit; open the trade on the Trade Desk for the
+verdict). Filter by players and picks: the search's dropdown lists every one
+in those trades, most traded first, with picks by round in any slot ("2027
+1st") or by slot; choose several (a trade must have all of them, on either
+side) and take any out again with its ✕. The search is kept in the link
+(`#/trades?with=<id>,p2027-1`, `tradeDbHash`), so other pages link straight
+to a player's trades. Sleeper doesn't say
 where a future pick will land, but each traded pick names its original team,
 so the crawl marks the next draft's picks early, mid or late (thirds of the
 league) from that team's standing as the trade is first read: the league's
@@ -559,14 +563,27 @@ league per run with such trades). Picks further out, and trades collected
 before this started, show just the year and round. The market still fits
 one value per round; slots only label the trades so far.
 
-The **Formula check** judges each trade the way KTC's trade database does
-(each asset at today's value in your format, through the Trade Calculator's
-formula in that trade's league size) to grade the formula against the market: real trades are
-deals both managers took, so a formula in line with them calls most of them
-close, and the side getting fewer pieces shouldn't come out ahead or behind
-on average. It shows, per shape, the share judged fair / slight / lopsided,
-the typical gap, and the median margin for the side getting fewer pieces,
-with the adjustments and on raw sums.
+The same trades tie the market into the rest of the site
+(`useRecentTrades`, the file loads only when needed):
+
+- **Player profiles** (both sports) get a *Recent trades* box: how often
+  the player was traded in the last 30 days in your format, the newest
+  three, and a link to all of them on the Trade Ledger (`PlayerTrades`).
+- **Trade Desk** (both sports): *Real trades like this one* under the
+  verdict lists recent trades with any of the deal's players or picks, most
+  overlap first, then those that split them the same way, turned so Side A
+  got what Team A gets (`tradeDbComparables`). Basketball's needs a market
+  picked under Values.
+- **Ledger → Trade Desk:** every trade with all its assets still valued
+  opens on the Trade Desk. A basketball link ends in its market format
+  (`#nbatrade=…~dynasty`), which the Trade Desk switches to.
+
+The **formula check** (`tradeDbCheck`, no longer shown on the page) judges
+each trade the way KTC's trade database does (each asset at today's value,
+through the Trade Calculator's formula in that trade's league size). Real
+trades are deals both managers took, so a formula in line with them calls
+most of them close, and the side getting fewer pieces shouldn't come out
+ahead or behind on average. The tests keep it that way.
 
 ### Trade Calculator
 
@@ -588,8 +605,7 @@ adjusted the way the big calculators do it (`evaluateTrade`, constants in
   worth about 900, in 14 teams under 100. Bigger leagues credit less, so
   depth matters more.
 
-The constants are fit to real trades with the Trade Database's formula
-check: the stud adjustment used to also favor whichever asset was best in
+The constants are fit to real trades with the formula check above: the stud adjustment used to also favor whichever asset was best in
 the trade (`trade: 0.1`), which had the calculator saying the side getting
 fewer pieces won the typical real 2-for-1 or 3-for-1 by about 20%. Without
 it, every trade shape in Superflex reads within about 4% (1QB still leans
@@ -970,13 +986,12 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
 - **Trading Floor** (`NbaMarket`, `#/nba/market`): see "Trade Market" below.
 - **Trade Ledger** (`NbaTradeDatabase`, `#/nba/trades`): the football Trade
   Database's page (`TradeDbBrowser`) for the trades behind the Trading Floor,
-  in its dynasty or redraft format (shared with the Trading Floor's switch).
-  Each trade is valued and judged at today's Trade Market values with that
-  format's `NBA_TRADE_FORMULA`, in the trade's league size, and the formula
-  check works as on football. Picks show as their draft year and round (the
-  NBA draft is in June, so from July the next one is a year on); Sleeper
-  basketball picks carry no slot. Its trades don't link to the Trade Desk,
-  which values on rest-of-season points by default.
+  in its dynasty or redraft format (shared with the Trading Floor's switch),
+  last 30 days, each asset at today's Trade Market value. Picks show as
+  their draft year and round (the NBA draft is in June, so from July the
+  next one is a year on); Sleeper basketball picks carry no slot. Trades
+  open on the Trade Desk at that market's values, and profiles and the
+  Trade Desk show recent trades as on football (see "Trade Database").
 
 ### Trade Market (Trading Floor)
 

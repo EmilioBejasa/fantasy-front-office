@@ -35,7 +35,7 @@ jobs:
 
       - name: Commit if changed
         run: |
-          git add data/nba-market.js data/nba-market-history.js data/nba-trades-recent.js cache/
+          git add data/nba-market.js data/nba-market-history.js data/nba-trades-recent.js data/nba-trades.js cache/
           if git diff --cached --quiet; then
             echo "No market changes."
             exit 0

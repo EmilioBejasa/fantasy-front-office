@@ -254,8 +254,39 @@ function tiers(rows) {
   });
 }
 
+// The basketball Trade Database (data/nba-trades.js), like football's
+// (lib/nfl-market.js tradeDatabase): every trade the fit used, as
+// [ts, format index, league size, side A, side B], newest first, with picks
+// as their draft ("p2027-1": a trade's "pick-1-1" is the draft after its
+// league's season) and names for the players in them. The NBA draft is in
+// June, so from July the next one is a year on.
+const DB_FORMATS = ["dynasty", "redraft"];
+const DRAFT_MONTH = 6; // July (0-based)
+const nextDraftYear = (now = Date.now()) => {
+  const d = new Date(now);
+  return d.getUTCMonth() < DRAFT_MONTH ? d.getUTCFullYear() : d.getUTCFullYear() + 1;
+};
+function tradeDatabase(usable, names, now = Date.now()) {
+  const asset = (id, season) => {
+    if (!isPick(id)) return id;
+    const [, out, round] = id.split("-").map(Number);
+    return `p${Number(season) + out}-${round}`;
+  };
+  const trades = [];
+  for (const [format, list] of Object.entries(usable)) {
+    const f = DB_FORMATS.indexOf(format);
+    if (f < 0) continue;
+    for (const t of list) trades.push([t.ts, f, t.size || 12, ...t.sides.map((s) => s.map((id) => asset(id, t.season)))]);
+  }
+  trades.sort((a, b) => b[0] - a[0]);
+  const seen = new Set();
+  for (const t of trades) for (const s of [t[3], t[4]]) for (const id of s) if (id[0] !== "p") seen.add(id);
+  const used = Object.fromEntries([...seen].sort().map((id) => [id, names[id] || "Unknown player"]));
+  return { updatedOn: new Date(now).toISOString().slice(0, 10), draftYear: nextDraftYear(now), formats: DB_FORMATS, names: used, trades };
+}
+
 module.exports = {
   ALPHA, THIN, TOP, HALF_LIFE, MAX_SIDE, LOPSIDED, LEAGUE_CAP,
   formatOf, pickKey, isPick, pickInfo, parseTrade, playerInputs, ageFactor, priorValues,
-  sideValue, cleanTrades, fitValues, scaleValues, tiers,
+  sideValue, cleanTrades, fitValues, scaleValues, tiers, nextDraftYear, tradeDatabase,
 };

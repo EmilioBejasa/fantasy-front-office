@@ -6,12 +6,15 @@
 //   model value, effective trade count, tier and 7/30-day change per asset.
 // - data/nba-market-history.js: one point a week per asset, for profiles.
 // - data/nba-trades-recent.js: the latest trades, for the page's feed.
+// - data/nba-trades.js: the Trade Database, every trade the fit used (see
+//   tradeDatabase in lib/nba-market.js).
 // and keeps its working state in cache/ (committed, not deployed):
 // - cache/nba-market-crawl.json: every league found so far and how far its
 //   trades have been read, plus users still to look up.
 // - cache/nba-trades.json: every trade collected (a year's worth).
 //
-// Usage: node scripts/refresh-nba-market.js [--budget N] [--backfill] [--dry-run]
+// Usage: node scripts/refresh-nba-market.js [--budget N] [--backfill] [--no-crawl] [--dry-run]
+// (--no-crawl refits from the trades already collected, reading no leagues.)
 //
 // Each run spends at most --budget Sleeper requests (default 3500, about five
 // a second, well under Sleeper's 1000 a minute): first finding new leagues by
@@ -33,11 +36,13 @@ const SNAPSHOT = path.join(ROOT, "data", "nba-snapshot.js");
 const OUT = path.join(ROOT, "data", "nba-market.js");
 const HISTORY_OUT = path.join(ROOT, "data", "nba-market-history.js");
 const RECENT_OUT = path.join(ROOT, "data", "nba-trades-recent.js");
+const DB_OUT = path.join(ROOT, "data", "nba-trades.js");
 
 const SEED_USER = "asterisk387";
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
 const BACKFILL = args.includes("--backfill");
+const NO_CRAWL = args.includes("--no-crawl");
 const BUDGET = Number(args[args.indexOf("--budget") + 1]) || (BACKFILL ? 16000 : 3500);
 const DISCOVER_SHARE = 0.35;    // of the budget, for finding new leagues
 const KEEP_DAYS = 365;
@@ -82,11 +87,13 @@ async function main() {
     if (me) crawl.frontier.push(me.user_id);
   }
 
-  await crawler.discover(crawl, season, Math.round(BUDGET * DISCOVER_SHARE));
-  const order = Object.entries(crawl.leagues).sort((a, b) => a[1].at - b[1].at);
-  await crawler.pool(order, ([id, l]) => crawler.scanLeague(id, l, week, store));
-  // Last season only with what's left, so this season's trades come first.
-  if (BACKFILL) await crawler.backfillPrevious(crawl, store, SEASON_WEEKS + 2);
+  if (!NO_CRAWL) {
+    await crawler.discover(crawl, season, Math.round(BUDGET * DISCOVER_SHARE));
+    const order = Object.entries(crawl.leagues).sort((a, b) => a[1].at - b[1].at);
+    await crawler.pool(order, ([id, l]) => crawler.scanLeague(id, l, week, store));
+    // Last season only with what's left, so this season's trades come first.
+    if (BACKFILL) await crawler.backfillPrevious(crawl, store, SEASON_WEEKS + 2);
+  }
   console.log(`${crawler.spent()} requests. Trades: ${before} → ${Object.keys(store).length}`);
 
   // Keep a year of trades.
@@ -147,6 +154,8 @@ async function main() {
   C.writeIfChanged(OUT, "NBA_MARKET", { updatedOn: today, season, stats, formats, trends }, { ...opts, compareOn: (d) => ({ formats: d.formats, stats: d.stats }) });
   C.writeIfChanged(HISTORY_OUT, "NBA_MARKET_HISTORY", history, opts);
   C.writeIfChanged(RECENT_OUT, "NBA_TRADES_RECENT", recent, opts);
+  const db = M.tradeDatabase({ dynasty: fits.dynasty.usable, redraft: fits.redraft.usable }, names, now);
+  C.writeIfChanged(DB_OUT, "NBA_TRADES", db, { ...opts, compareOn: (d) => d.trades });
   if (!DRY_RUN) {
     fs.mkdirSync(path.dirname(CRAWL), { recursive: true });
     fs.writeFileSync(CRAWL, JSON.stringify(crawl));

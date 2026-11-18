@@ -745,19 +745,34 @@ test("tradeDbCheck and tradeDbView: shape summaries and filters", () => {
   assert.ok(two.lean > 0); // the calculator says the consolidating side wins
   assert.equal(two.rawLean, 0);
   assert.equal(check.find((c) => c.key === "1-1").lean, null);
-  assert.equal(app.tradeDbView(list, { query: "charlie" }).length, 2);
-  assert.equal(app.tradeDbView(list, { query: "2027 1st" }).length, 2);
-  assert.equal(app.tradeDbView(list, { query: "early" }).length, 1);
-  assert.equal(app.tradeDbView(list, { shape: "1-1" }).length, 4);
+  const view = (selected, shape) => app.tradeDbView(list, { selected, shape }).length;
+  assert.equal(view(["c"]), 2);
+  assert.equal(view(["p2027-1"]), 2);        // a pick in any slot
+  assert.equal(view(["p2027-1-early"]), 1);  // just that slot
+  assert.equal(view(["c", "p2027-1"]), 1);   // every selected asset must be in the trade
+  assert.equal(view(["a", "d"]), 0);
+  assert.equal(view([], "1-1"), 4);
+  const opts = plain(app.tradeDbOptions(list));
+  const opt = (key) => opts.find((o) => o.key === key);
+  assert.equal(opt("d").n, 3);               // in three trades
+  assert.equal(opts[0].key, "d");            // most traded first
+  assert.equal(opt("p2027-1").name, "2027 1st");
+  assert.equal(opt("p2027-1").n, 2);
+  assert.equal(opt("p2027-1-early").name, "2027 1st (Early)");
+  assert.equal(opt("gone").sub, "No longer listed");
   assert.deepEqual(plain(app.tradeDbView(list).map((t) => t.ts)), plain(list.map((t) => t.ts))); // newest first
 });
 
-test("evaluateTrade: football's stud premium is league-wide only; basketball keeps the in-trade premium", () => {
+test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());
-  const nba = app.evaluateTrade([[3000], [1500, 1500]], ctx(12, { formula: app.NBA_TRADE_FORMULA }));
   assert.ok(nfl.stud[0] < 50, `football stud ${nfl.stud[0]}`);
-  assert.ok(nba.stud[0] > 300, `basketball stud ${nba.stud[0]}`);
+  for (const f of ["dynasty", "redraft"]) {
+    const r = app.evaluateTrade([[3000], [1500, 1500]], ctx(12, { formula: app.NBA_TRADE_FORMULA[f] }));
+    assert.ok(r.stud[0] < 50, `basketball ${f} stud ${r.stud[0]}`);
+  }
+  const credit = (f) => app.evaluateTrade([[3000], [1500, 1500]], ctx(12, { formula: app.NBA_TRADE_FORMULA[f], rosterSpots: 13 })).credit[0];
+  assert.ok(Math.abs(credit("dynasty") - 0.75 * credit("redraft")) < 1);
   // Four mid players still don't beat a star on volume.
   const star = app.evaluateTrade([[9000], [2500, 2500, 2500, 2500]], ctx());
   assert.equal(star.winner, 0);

@@ -89,8 +89,8 @@ The page is laid out like a website, themed as an **executive front office**
   | Player File | Player Profile (no nav entry; reached from player names) |
 
   Basketball reuses the football names for its matching rooms (Scoreboard,
-  Waiver Desk, Training Room, Boardroom, War Room, Trade Desk), plus the Big
-  Board (Player Rankings).
+  Waiver Desk, Training Room, Boardroom, War Room, Trade Desk, Trade Ledger),
+  plus the Big Board (Player Rankings) and the Trading Floor (Trade Market).
 
   The nav, home folder tabs, page labels and browser tab titles use the room
   name. The page heading still says what the tool is.
@@ -545,7 +545,10 @@ Every completed two-team trade the football Trade Market is fit from
 stored by draft year, so a pick that's since been drafted shows as such),
 listed newest first with the date and time, league size and what each side
 got. Filter by window, shape (1 for 1, 2 for 1, 3+ for 1, many for many) and
-player or pick, and open any trade in the calculator. Sleeper doesn't say
+players and picks: the search's dropdown lists every one in those trades,
+most traded first, with picks by round in any slot ("2027 1st") or by slot;
+choose several (a trade must have all of them, on either side) and take any
+out again with its ✕. Open any trade in the calculator. Sleeper doesn't say
 where a future pick will land, but each traded pick names its original team,
 so the crawl marks the next draft's picks early, mid or late (thirds of the
 league) from that team's standing as the trade is first read: the league's
@@ -591,9 +594,13 @@ the trade (`trade: 0.1`), which had the calculator saying the side getting
 fewer pieces won the typical real 2-for-1 or 3-for-1 by about 20%. Without
 it, every trade shape in Superflex reads within about 4% (1QB still leans
 about 6% toward the side getting fewer pieces), and four mid players still
-don't beat a star on volume. Basketball keeps the original constants
-(`NBA_TRADE_FORMULA`) until they're checked against its own trades. It's
-this app's own blend, not any one site's exact formula. Within 5% (or 250) is "fair", and up to 15% "slightly
+don't beat a star on volume. Basketball's (`NBA_TRADE_FORMULA`, one per
+Trade Market format) are fit the same way to its own trades: the original
+constants had the side getting fewer pieces winning by about 20% (dynasty)
+and 12% (redraft); a smaller league-wide stud premium (`overall` 0.05, no
+in-trade premium) brings both within about 3%, with dynasty's roster spot
+credit at 3/4 (`credit`). Rest-of-season points use redraft's. It's this
+app's own blend, not any one site's exact formula. Within 5% (or 250) is "fair", and up to 15% "slightly
 favors". **Raw values** turns both adjustments off. A collapsible "How this
 is calculated" note on the page shows the current waiver-level player and
 value. "To even it out" re-runs the whole formula for every candidate to find
@@ -948,8 +955,9 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   from Sleeper's schedule (`fetchSchedule`, cached 6 hours and saved in the
   snapshot).
 - **Trade Desk** (`NbaTrade`): the football Trade Desk's formula
-  (`evaluateTrade`, same stud adjustment and roster spot credit) with
-  13-man rosters. Values are **projected rest-of-season fantasy points**
+  (`evaluateTrade`) with 13-man rosters and basketball's own constants
+  (`NBA_TRADE_FORMULA`, fit to its trades; see "Trade Calculator").
+  Rest-of-season points use redraft's. Values are **projected rest-of-season fantasy points**
   (`nbaTradeRows`):
   - points per game × team games left × availability
   - points per game blends this season with last season's average, which
@@ -960,6 +968,15 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   A **Values** switch swaps in the Trading Floor's dynasty or redraft market
   values instead (dynasty adds rookie picks).
 - **Trading Floor** (`NbaMarket`, `#/nba/market`): see "Trade Market" below.
+- **Trade Ledger** (`NbaTradeDatabase`, `#/nba/trades`): the football Trade
+  Database's page (`TradeDbBrowser`) for the trades behind the Trading Floor,
+  in its dynasty or redraft format (shared with the Trading Floor's switch).
+  Each trade is valued and judged at today's Trade Market values with that
+  format's `NBA_TRADE_FORMULA`, in the trade's league size, and the formula
+  check works as on football. Picks show as their draft year and round (the
+  NBA draft is in June, so from July the next one is a year on); Sleeper
+  basketball picks carry no slot. Its trades don't link to the Trade Desk,
+  which values on rest-of-season points by default.
 
 ### Trade Market (Trading Floor)
 
@@ -995,7 +1012,10 @@ real trades, like KeepTradeCut's tradesourced values:
 - **Output.** `data/nba-market.js` (values 0-9,999 with the top asset at 9,999,
   model value, effective trade count, tier, 7- and 30-day change),
   `data/nba-market-history.js` (weekly, for profiles) and
-  `data/nba-trades-recent.js` (the latest 150 trades). The page shows rankings
+  `data/nba-trades-recent.js` (the latest 150 trades), plus
+  `data/nba-trades.js`, every trade the fit used, for the Trade Ledger
+  (`tradeDatabase`; `--no-crawl` refits from the trades already collected
+  without reading any leagues). The page shows rankings
   with tiers, filters and sorts, risers and fallers, the trade count (*thin*
   under 5), market vs model, and recent trades at today's values judged with
   `evaluateTrade`. Player profiles get a market box (`NbaMarketProfile`).

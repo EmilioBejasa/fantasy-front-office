@@ -2876,15 +2876,25 @@ function DraftBoard({ data, settings, setSettings }) {
 // trades. With `trade` at 0.1 the calculator said the side getting fewer
 // pieces won the typical real 2-for-1 or 3-for-1 by about 20%; with it at 0
 // that's within about 4% for every trade shape in Superflex (1QB still
-// leans about 6% toward the side getting fewer pieces). Basketball keeps
-// the original hand-tuned constants (NBA_TRADE_FORMULA), which aren't yet
-// checked against its trades.
+// leans about 6% toward the side getting fewer pieces).
+//
+// Basketball's are fit the same way to its own trades (NBA_TRADE_FORMULA,
+// one per Trade Market format). The original constants (`trade` 0.1) had the
+// side getting fewer pieces winning typical real trades by about 20%
+// (dynasty) and 12% (redraft). A smaller league-wide stud premium and no
+// in-trade one brings both within about 3%; dynasty also needs the roster
+// spot credit at 3/4 (13-man rosters make the waiver-level player good, and
+// dynasty managers don't count on him). Rest-of-season points use redraft's.
 const TRADE_FORMULA = {
   floor: 0.2, trade: 0, tradeExp: 3, overall: 0.1, overallExp: 3,
+  credit: 1,       // share of the waiver-level player's value credited
   rosterSpots: 25, // roster spots per team, to find the waiver-level player
   spotStep: 10,    // each extra spot, the pickup is this many ranks better
 };
-const NBA_TRADE_FORMULA = { ...TRADE_FORMULA, trade: 0.1 };
+const NBA_TRADE_FORMULA = {
+  dynasty: { ...TRADE_FORMULA, overall: 0.05, credit: 0.75 },
+  redraft: { ...TRADE_FORMULA, overall: 0.05 },
+};
 // "Fair" within 5% of the bigger side (or 250 value, for small trades);
 // "slightly favors" up to 15%.
 const TRADE_FAIR_PCT = 0.05;
@@ -2939,7 +2949,8 @@ function evaluateTrade(sideValues, ctx) {
 
     const diff = sideValues[0].length - sideValues[1].length;
     const fewer = diff < 0 ? 0 : 1;
-    for (let k = 1; k <= Math.abs(diff); k++) credit[fewer] += replacementPlayer(ctx.playerValues, ctx.teams, k, ctx.rosterSpots).value;
+    const creditShare = (ctx.formula || TRADE_FORMULA).credit ?? 1;
+    for (let k = 1; k <= Math.abs(diff); k++) credit[fewer] += creditShare * replacementPlayer(ctx.playerValues, ctx.teams, k, ctx.rosterSpots).value;
   }
 
   const adjusted = sums.map((s, i) => s + stud[i] + credit[i]);
@@ -3138,7 +3149,9 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result }) {
             <p>
               <strong>Roster spot credit</strong> (like FantasyCalc): the side getting fewer players can fill each open spot from
               waivers. In a {ctx.teams >= 16 ? "16+" : ctx.teams}-team league that's about the {waiver.rank}th-best player, worth{" "}
-              {fmtValue(waiver.value)} right now. Bigger leagues have worse free agents, so the credit shrinks and depth matters more.
+              {fmtValue(waiver.value)} right now{((ctx.formula || TRADE_FORMULA).credit ?? 1) < 1
+                ? `, and the side is credited ${Math.round(((ctx.formula || TRADE_FORMULA).credit ?? 1) * 100)}% of that`
+                : ""}. Bigger leagues have worse free agents, so the credit shrinks and depth matters more.
             </p>
             <p>
               Within {Math.round(TRADE_FAIR_PCT * 100)}% is fair; up to {Math.round(TRADE_SLIGHT_PCT * 100)}% slightly favors one side. These weights are this
@@ -6432,7 +6445,8 @@ const nextRookieDraft = (now = Date.now()) => {
   return d.getUTCMonth() < 8 ? d.getUTCFullYear() : d.getUTCFullYear() + 1;
 };
 
-// The database's trades in one format ("dynasty-sf"), newest first, each
+// The database's trades in one format ("dynasty-sf"; basketball's
+// "dynasty" or "redraft"), newest first, each
 // asset valued from `rows` (the page's value rows, best first) and the trade
 // judged with and without the calculator's adjustments:
 // { ts, size, sides: [[asset]], shape, fewer (index of the side getting
@@ -6441,7 +6455,8 @@ const nextRookieDraft = (now = Date.now()) => {
 // says why it has no value today ("drafted": a pick since used; "unlisted"),
 // and a trade with one isn't judged. A pick with a known slot ("p2027-1-early",
 // from its original team's standing) is "2027 1st (Early)" at that slot's value.
-function tradeDbRows(db, rows, format, now = Date.now()) {
+// opts: { formula, rosterSpots, draftYear } for basketball (football's by default).
+function tradeDbRows(db, rows, format, now = Date.now(), { formula, rosterSpots, draftYear } = {}) {
   if (!db?.trades) return [];
   const f = db.formats.indexOf(format);
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
@@ -6451,7 +6466,7 @@ function tradeDbRows(db, rows, format, now = Date.now()) {
     const p = r.position === "PICK" && window.FantasyCalc.parsePick(r.name);
     if (p && p.slot) slotRows[`${p.year}-${p.round}-${p.slot}`] = r;
   }
-  const draft = nextRookieDraft(now);
+  const draft = draftYear ?? nextRookieDraft(now);
   const playerValues = rows.filter((r) => r.position !== "PICK").map((r) => r.value);
   const topValue = rows[0]?.value || 1;
   const asset = (id) => {
@@ -6473,7 +6488,7 @@ function tradeDbRows(db, rows, format, now = Date.now()) {
     const sides = [a.map(asset), b.map(asset)];
     const judged = sides.every((s) => s.every((x) => !x.why));
     const values = sides.map((s) => s.map((x) => x.value));
-    const ctx = { topValue, playerValues, teams: size || 12 };
+    const ctx = { topValue, playerValues, teams: size || 12, formula, rosterSpots };
     out.push({
       ts, size: size || 12, sides, judged, shape: tradeShape(a.length, b.length),
       fewer: a.length === b.length ? -1 : a.length < b.length ? 0 : 1,
@@ -6510,12 +6525,106 @@ function tradeDbCheck(list) {
   });
 }
 
-// The trades to list, newest first: filtered by shape and a player or pick name.
-function tradeDbView(list, { shape = "all", query = "" } = {}) {
-  const q = foldName(query.trim());
+// Whether an asset is the one a filter key names: a player id, a pick at a
+// slot ("p2027-1-early"), or a pick in any slot ("p2027-1").
+const tradeDbMatches = (a, key) => a.id === key || (key[0] === "p" && key.split("-").length === 2 && a.id.startsWith(`${key}-`));
+
+// The trades to list, newest first: filtered by shape and the selected
+// players and picks (filter keys, as above), every one of which must be in
+// the trade, on either side.
+function tradeDbView(list, { shape = "all", selected = [] } = {}) {
   return list.filter((t) =>
     (shape === "all" || t.shape === shape) &&
-    (!q || t.sides.some((s) => s.some((a) => foldName(a.name).includes(q)))));
+    selected.every((key) => t.sides.some((s) => s.some((a) => tradeDbMatches(a, key)))));
+}
+
+// The picker's options: every player and pick in these trades, as
+// { key, name, sub, n (trades it's in), folded }, most traded first. Picks
+// are offered by year and round ("2027 1st", any slot) and, where trades
+// have one, by slot too ("2027 1st (Early)").
+function tradeDbOptions(list) {
+  const opts = {};
+  const add = (key, name, sub, t) => {
+    const o = (opts[key] ||= { key, name, sub, n: 0, last: null, folded: foldName(name) });
+    if (o.last !== t) { o.n++; o.last = t; }
+  };
+  for (const t of list) {
+    for (const s of t.sides) for (const a of s) {
+      if (a.position === "PICK") {
+        const [y, rd, slot] = a.id.slice(1).split("-");
+        add(`p${y}-${rd}`, `${y} ${ordinal(Number(rd))}`, "Pick, any slot", t);
+        if (slot) add(a.id, a.name, "Pick", t);
+      } else add(a.id, a.name, a.position ? `${a.position}${a.posRank ?? ""} · ${a.team || "FA"}` : "No longer listed", t);
+    }
+  }
+  return Object.values(opts).map(({ last, ...o }) => o).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+}
+
+// Search with a dropdown of the trades' players and picks: pick several,
+// each shown as a chip you can take out again.
+function TradeDbPicker({ options, selected, setSelected }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const chosen = new Set(selected.map((s) => s.key));
+  const matches = useMemo(() => {
+    const q = foldName(query).trim();
+    return options.filter((o) => !chosen.has(o.key) && (!q || o.folded.includes(q))).slice(0, 10);
+  }, [options, query, selected]);
+  const pick = (o) => { setSelected((s) => [...s, { key: o.key, name: o.name }]); setQuery(""); };
+  const remove = (key) => setSelected((s) => s.filter((x) => x.key !== key));
+
+  return (
+    <div className="flex flex-col gap-2 w-full sm:w-auto">
+      <div className="relative w-full sm:w-72">
+        <input type="search" value={query} placeholder={selected.length ? "Add another player or pick" : "Player or pick"}
+          aria-label="Find trades with a player or pick"
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && matches[0]) { e.preventDefault(); pick(matches[0]); }
+            else if (e.key === "Backspace" && !query && selected.length) remove(selected[selected.length - 1].key);
+            else if (e.key === "Escape") setOpen(false);
+          }}
+          className="rounded-md border px-3 py-1.5 text-sm w-full" style={inputStyle} />
+        {open && matches.length > 0 && (
+          <ul className="absolute z-30 left-0 right-0 mt-1 rounded-md border overflow-hidden shadow-lg max-h-80 overflow-y-auto"
+            style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+            {!query.trim() && <li className="px-3 pt-2 pb-1 text-xs" style={{ color: "var(--text-muted)" }}>Most traded</li>}
+            {matches.map((o) => (
+              <li key={o.key}>
+                {/* mousedown, not click, so the pick lands before the input's blur closes the list */}
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+                  className="menu-item w-full text-left px-3 py-1.5 text-sm flex justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    <span style={{ color: "var(--text-primary)" }}>{o.name}</span>{" "}
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{o.sub}</span>
+                  </span>
+                  <span className="text-xs tabular-nums shrink-0" style={{ color: "var(--text-secondary)" }}>
+                    {o.n.toLocaleString()} trade{o.n === 1 ? "" : "s"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {selected.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1 rounded-full border pl-2.5 pr-1 py-0.5 text-xs"
+              style={{ borderColor: "var(--page-hue, var(--border))", color: "var(--text-primary)" }}>
+              {s.name}
+              <button type="button" onClick={() => remove(s.key)} aria-label={`Take out ${s.name}`}
+                className="icon-btn-danger rounded-full px-1 leading-none">✕</button>
+            </span>
+          ))}
+          {selected.length > 1 && (
+            <button type="button" onClick={() => setSelected([])} className="text-xs underline" style={{ color: "var(--text-muted)" }}>Clear all</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const fmtShare = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
@@ -6530,7 +6639,7 @@ function TradeDbCheck({ check }) {
       <div className="flex flex-col gap-1">
         <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Formula check</h3>
         <p className="text-xs max-w-3xl" style={{ color: "var(--text-muted)" }}>
-          How the Trade Calculator's formula grades real trades. Both managers took these deals, so a formula in line with the
+          How the site's trade formula grades real trades. Both managers took these deals, so a formula in line with the
           market calls most of them fair and leans neither way. <strong>Fewer pieces</strong> is the median margin for the side
           getting fewer players and picks: + means the calculator says consolidating wins (its stud adjustment and roster spot
           credit are too generous), − means it says the side getting more wins (not generous enough). Raw is the same with plain
@@ -6572,8 +6681,10 @@ function TradeDbCheck({ check }) {
 }
 
 // One trade: when it happened, the league size, and what each side got.
-function TradeDbCard({ t }) {
-  const link = t.judged && `#trade=${t.sides.map((s) => s.map((a) => encodeURIComponent(a.rowId)).join(",")).join("|")}`;
+// Football trades link to the Trade Calculator (basketball's Trade Analyzer
+// values on rest-of-season points by default, so its trades don't).
+function TradeDbCard({ t, sport = "nfl" }) {
+  const link = sport === "nfl" && t.judged && `#trade=${t.sides.map((s) => s.map((a) => encodeURIComponent(a.rowId)).join(",")).join("|")}`;
   const when = new Date(t.ts);
   return (
     <div className="rounded-lg border p-3 flex flex-col gap-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
@@ -6590,7 +6701,7 @@ function TradeDbCard({ t }) {
             <li className="text-xs font-semibold" style={{ color: SIDE_COLOR[TRADE_SIDES[si]] }}>Side {TRADE_SIDES[si]} gets</li>
             {s.map((a, ai) => (
               <li key={ai} className="truncate">
-                {a.why ? <span style={{ color: "var(--text-muted)" }}>{a.name}</span> : <PlayerLink id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}
+                {a.why ? <span style={{ color: "var(--text-muted)" }}>{a.name}</span> : <PlayerLink sport={sport} id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}
                 {a.position && a.position !== "PICK" && <span className="text-xs ml-1" style={{ color: "var(--text-muted)" }}>{a.position}{a.posRank}</span>}
                 {a.why === "drafted" && <span className="text-xs ml-1" style={{ color: "var(--text-muted)" }}>(since drafted)</span>}
               </li>
@@ -6603,18 +6714,62 @@ function TradeDbCard({ t }) {
   );
 }
 
-function TradeDatabase({ data, settings, setSettings }) {
-  const db = useDataFile(loadNflTrades);
+// The database itself, for either sport: window and shape, the formula
+// check, the player and pick picker, and the trades. all: tradeDbRows' list;
+// label: the format, for the count ("dynasty Superflex").
+function TradeDbBrowser({ db, all, label, sport = "nfl", format }) {
   const [days, setDays] = useState(90);
   const [shape, setShape] = useState("all");
-  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState([]); // [{ key, name }]
   const [limit, setLimit] = useState(TRADE_DB_PAGE);
-  const format = `${settings.mode}-${settings.qb}`;
-  const all = useMemo(() => tradeDbRows(db, data.rows, format), [db, data.rows, format]);
   const recent = useMemo(() => { const since = Date.now() - days * DAY_MS; return all.filter((t) => t.ts >= since); }, [all, days]);
   const check = useMemo(() => tradeDbCheck(recent), [recent]);
-  const shown = useMemo(() => tradeDbView(recent, { shape, query }), [recent, shape, query]);
-  useEffect(() => { setLimit(TRADE_DB_PAGE); }, [format, days, shape, query]);
+  const options = useMemo(() => tradeDbOptions(recent), [recent]);
+  const keys = selected.map((s) => s.key);
+  const shown = useMemo(() => tradeDbView(recent, { shape, selected: keys }), [recent, shape, keys.join(",")]);
+  useEffect(() => { setLimit(TRADE_DB_PAGE); }, [format, days, shape, keys.join(",")]);
+
+  if (db === undefined) return <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading trades…</p>;
+  if (db === null) return <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>The trade database isn't available right now.</p>;
+  return (
+    <>
+      <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
+        <LabeledControl label="Traded in the last"><PillGroup options={TRADE_DB_WINDOWS} value={days} onChange={setDays} /></LabeledControl>
+        <LabeledControl label="Shape"><PillGroup options={TRADE_DB_SHAPES} value={shape} onChange={setShape} /></LabeledControl>
+      </div>
+
+      <TradeDbCheck check={check} />
+
+      <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
+        <LabeledControl label={selected.length > 1 ? "Trades with all of" : "Trades with"}>
+          <TradeDbPicker options={options} selected={selected} setSelected={setSelected} />
+        </LabeledControl>
+      </div>
+
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        {shown.length.toLocaleString()} of {recent.length.toLocaleString()} {label} trades
+      </p>
+
+      {recent.length === 0 ? (
+        <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>No trades in this format in that window yet.</p>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2">
+          {shown.slice(0, limit).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport={sport} />)}
+        </div>
+      )}
+      {shown.length > limit && (
+        <button type="button" onClick={() => setLimit(limit + TRADE_DB_PAGE)} className="btn-secondary rounded-md px-3 py-1.5 text-sm font-medium w-fit">
+          Show more ({(shown.length - limit).toLocaleString()} left)
+        </button>
+      )}
+    </>
+  );
+}
+
+function TradeDatabase({ data, settings, setSettings }) {
+  const db = useDataFile(loadNflTrades);
+  const format = `${settings.mode}-${settings.qb}`;
+  const all = useMemo(() => tradeDbRows(db, data.rows, format), [db, data.rows, format]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -6638,41 +6793,44 @@ function TradeDatabase({ data, settings, setSettings }) {
 
       <LeagueSettings settings={settings} setSettings={setSettings} fields={["mode", "qb", "tep"]} />
 
-      {db === undefined && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>Loading trades…</p>}
-      {db === null && <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>The trade database isn't available right now.</p>}
-      {db && (
-        <>
-          <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-            <LabeledControl label="Traded in the last"><PillGroup options={TRADE_DB_WINDOWS} value={days} onChange={setDays} /></LabeledControl>
-            <LabeledControl label="Shape"><PillGroup options={TRADE_DB_SHAPES} value={shape} onChange={setShape} /></LabeledControl>
-          </div>
+      <TradeDbBrowser db={db} all={all} format={format}
+        label={format.replace("-", " ").replace("sf", "Superflex").replace("1qb", "1QB")} />
+    </div>
+  );
+}
 
-          <TradeDbCheck check={check} />
+// Basketball's Trade Database: the trades behind its Trade Market
+// (data/nba-trades.js, by scripts/refresh-nba-market.js), judged with the
+// market's values and the Trade Analyzer's formula for that format (NBA_TRADE_FORMULA).
+const loadNbaTrades = () => loadDataScript("data/nba-trades.js", "NBA_TRADES");
+function NbaTradeDatabase({ data }) {
+  const db = useDataFile(loadNbaTrades);
+  const market = useDataFile(loadNbaMarket);
+  const [format, setFormat] = useNbaMarketFormat();
+  const rows = useMemo(() => (market ? nbaMarketRows(market, format, data.players) : []), [market, format, data.players]);
+  const all = useMemo(() => (market ? tradeDbRows(db, rows, format, Date.now(), {
+    formula: NBA_TRADE_FORMULA[format], rosterSpots: NBA_ROSTER_SPOTS, draftYear: Number(market.season) + 1,
+  }) : []), [db, rows, format, market]);
 
-          <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-            <LabeledControl label="Search">
-              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Player or pick (2027 1st)"
-                aria-label="Search trades" className="rounded-md border px-3 py-1.5 text-sm w-56" style={inputStyle} />
-            </LabeledControl>
-          </div>
+  return (
+    <div className="flex flex-col gap-5">
+      <NbaPageHeader title="Trade Database" lead={`Real ${format} trades from public Sleeper basketball leagues, newest first.`}>
+        These are the completed two-team trades the basketball Trade Market's values are fit from{db?.updatedOn ? ` (updated ${db.updatedOn})` : ""}:
+        giant, wildly lopsided and roster-dump trades are already left out, and one busy league can't flood the list. Dynasty
+        includes keeper leagues. Picks show as their draft year and round. The formula check judges each trade the way the Trade
+        Analyzer would with today's Trade Market values, in that trade's league size; values have moved since older trades were
+        made, so a shorter window is a fairer test. Trades with a pick that's since been drafted, or a player no longer on an NBA
+        roster, are left out of it.
+      </NbaPageHeader>
 
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {shown.length.toLocaleString()} of {recent.length.toLocaleString()} {format.replace("-", " ").replace("sf", "Superflex").replace("1qb", "1QB")} trades
-          </p>
+      <div className="flex">
+        <LabeledControl label="Format"><PillGroup options={NBA_MARKET_FORMATS} value={format} onChange={setFormat} /></LabeledControl>
+      </div>
 
-          {recent.length === 0 ? (
-            <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>No trades in this format in that window yet.</p>
-          ) : (
-            <div className="grid gap-2 md:grid-cols-2">
-              {shown.slice(0, limit).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} />)}
-            </div>
-          )}
-          {shown.length > limit && (
-            <button type="button" onClick={() => setLimit(limit + TRADE_DB_PAGE)} className="btn-secondary rounded-md px-3 py-1.5 text-sm font-medium w-fit">
-              Show more ({(shown.length - limit).toLocaleString()} left)
-            </button>
-          )}
-        </>
+      {market === null ? (
+        <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>The market file isn't available right now.</p>
+      ) : (
+        <TradeDbBrowser db={market === undefined ? undefined : db} all={all} format={format} label={format} sport="nba" />
       )}
     </div>
   );
@@ -8255,7 +8413,7 @@ function NbaTrade({ data, settings, setSettings }) {
     playerValues: rows.filter((r) => !r.pick).map((r) => r.value),
     teams: settings.teams,
     raw: settings.raw,
-    rosterSpots: NBA_ROSTER_SPOTS, formula: NBA_TRADE_FORMULA,
+    rosterSpots: NBA_ROSTER_SPOTS, formula: NBA_TRADE_FORMULA[source === "dynasty" ? "dynasty" : "redraft"],
     fairMin: useMarket ? TRADE_FAIR_MIN : 100,
   }), [rows, settings.teams, settings.raw, useMarket]);
   const result = useMemo(() => evaluateTrade(sides.map((ids) => ids.map((id) => byId[id]?.value || 0)), ctx), [sides, byId, ctx]);
@@ -8535,7 +8693,7 @@ function NbaMarketTrades({ trades, format, rows, season }) {
         {list.slice(0, limit).map((t, ti) => {
           const sides = t.sides.map((s) => s.map(asset));
           const result = evaluateTrade(sides.map((s) => s.map((a) => a.value)), {
-            topValue: 9999, playerValues, teams: t.size || 12, raw: false, rosterSpots: NBA_ROSTER_SPOTS, formula: NBA_TRADE_FORMULA, fairMin: TRADE_FAIR_MIN,
+            topValue: 9999, playerValues, teams: t.size || 12, raw: false, rosterSpots: NBA_ROSTER_SPOTS, formula: NBA_TRADE_FORMULA[format], fairMin: TRADE_FAIR_MIN,
           });
           const verdict = result.verdict === "fair" ? "Even by today's values" : `Side ${TRADE_SIDES[result.winner]} ahead by ${Math.round(result.pct * 100)}% today`;
           return (
@@ -10268,6 +10426,8 @@ const PAGES = [
   { key: "nba-market", sport: "nba", label: "Trade Market", short: "Trading Floor", hash: "#/nba/market", group: "Front office",
     blurb: "KeepTradeCut-style dynasty and redraft values, built from real trades in public Sleeper leagues, with trends and the latest deals." },
   { key: "nba-player", sport: "nba", label: "Player Profile", short: "Player File", hash: "#/nba/player/", hidden: true },
+  { key: "nba-trade-db", sport: "nba", label: "Trade Database", short: "Trade Ledger", hash: "#/nba/trades", group: "Front office",
+    blurb: "Thousands of real Sleeper basketball trades, newest first and searchable by player or pick, plus how well the trade formula matches what managers pay." },
   { key: "nba-trade", sport: "nba", label: "Trade Analyzer", short: "Trade Desk", hash: "#/nba/trade", group: "Front office",
     blurb: "See who wins a trade, valued on rest-of-season points or the Trade Market's dynasty and redraft values." },
 ];
@@ -10316,6 +10476,7 @@ const PAGE_STYLE = {
   "nba-draftboard": { hue: "var(--hue-aqua)", icon: PAGE_ICONS.draft },
   "nba-player": { hue: "var(--hue-blue)", icon: PAGE_ICONS.profile },
   "nba-trade": { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
+  "nba-trade-db": { hue: "var(--hue-violet)", icon: PAGE_ICONS.ledger },
   "nba-market": { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
 };
 
@@ -11126,6 +11287,7 @@ function App() {
             {page === "nba-draftboard" && <NbaDraftBoard {...nbaProps} />}
             {page === "nba-player" && <NbaProfile {...nbaProps} />}
             {page === "nba-trade" && <NbaTrade {...nbaProps} />}
+            {page === "nba-trade-db" && <NbaTradeDatabase {...nbaProps} />}
             {page === "nba-market" && <NbaMarket {...nbaProps} />}
           </NbaGate>
         )}

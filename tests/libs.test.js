@@ -347,3 +347,16 @@ test("nfl-market pick slots: thirds by record, the right season's standings, one
   const db = nfl.tradeDatabase({ "dynasty-sf": [t] }, {}, Date.UTC(2026, 10, 17));
   assert.deepEqual(db.trades[0][4], ["p2027-1-early", "p2028-1"]);
 });
+
+test("nba-market tradeDatabase: picks become the draft after the trade's season, newest first", () => {
+  const nba = require("../scripts/lib/nba-market");
+  const usable = {
+    dynasty: [{ ts: 2, size: 10, season: "2025", sides: [["1"], ["pick-1-1"]] }], // last season's: the 2026 1st
+    redraft: [{ ts: 5, season: "2026", sides: [["2"], ["3"]] }],
+  };
+  const db = nba.tradeDatabase(usable, { 1: "A", 2: "B" }, Date.UTC(2026, 10, 17));
+  assert.equal(db.draftYear, 2027);
+  assert.deepEqual(db.trades, [[5, 1, 12, ["2"], ["3"]], [2, 0, 10, ["1"], ["p2026-1"]]]);
+  assert.deepEqual(db.names, { 1: "A", 2: "B", 3: "Unknown player" });
+  assert.equal(nba.nextDraftYear(Date.UTC(2027, 5, 1)), 2027); // before the June draft
+});

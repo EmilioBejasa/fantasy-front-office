@@ -5283,6 +5283,18 @@ function Sparkline({ points, color, width = 132, height = 34 }) {
   );
 }
 
+// A market history file's points for one asset ({ dates, [key]: { id:
+// [value or null per date] } }), as [{ t, v }] with gaps left out, the last
+// `weeks` of them (all with none). key: the format ("dynasty-sf", "redraft").
+function historyPoints(history, key, id, weeks) {
+  const series = history?.[key]?.[id];
+  if (!series) return [];
+  const points = (history.dates || []).map((t, i) => ({ t, v: series[i] })).filter((pt) => pt.v != null);
+  return weeks ? points.slice(-weeks) : points;
+}
+const trendColor = (points) => (points.length < 2 || points[points.length - 1].v === points[0].v ? "var(--text-muted)"
+  : points[points.length - 1].v > points[0].v ? "var(--trend-up)" : "var(--series-red)");
+
 // The top of a league page: the team's avatar, name, lean and what sets it
 // apart, with its value (counting up), 30-day trend and value sparkline,
 // tinted in the lean's color.
@@ -6455,7 +6467,7 @@ function nflMarketRows(rows, settings, market = window.NFL_MARKET) {
     return {
       id: r.id, pick, name: r.name, position: r.position, team: r.team || null, age: r.age ?? null,
       value: r.value, model: m, gap: m == null ? 0 : r.value - m, trades: n, thin: n < NBA_MARKET_THIN,
-      d30: r.trend30 || 0, d7: 0, fcRank: pick ? null : fcRank[r.id] ?? null, ledgerKey: pick ? pickLedgerKey(r.name) : r.id,
+      d30: r.trend30 || 0, d7: 0, fcRank: pick ? null : fcRank[r.id] ?? null, ledgerKey: pick ? pickLedgerKey(r.name) : r.id, historyId: key,
     };
   }).sort((a, b) => b.value - a.value);
   const posCount = {};
@@ -6523,6 +6535,55 @@ function LatestTrades({ sport, db, list, format }) {
   );
 }
 
+// A football profile's market box, like basketball's NbaMarketProfile: the
+// player's Trade Market value in your format with its rank, 30-day change,
+// the trades behind it, the model's value, FantasyCalc's rank against the
+// market's, and (dynasty) the last 12 weeks.
+function NflMarketProfile({ id, dynasty, settings }) {
+  const own = dynasty.source?.key === "own";
+  const rows = useMemo(() => (own ? nflMarketRows(dynasty.rows, settings) : []), [own, dynasty.rows, settings.mode, settings.qb]);
+  const row = rows.find((r) => r.id === id);
+  const isDynasty = settings.mode === "dynasty";
+  const history = useDataFile(loadNflMarketHistory, !!row && isDynasty);
+  if (!row) return null;
+  const format = `${settings.mode}-${settings.qb}`;
+  const points = isDynasty ? historyPoints(history, format, id, MARKET_TREND_WEEKS) : [];
+  const stat = (label, value, color) => (
+    <div>
+      <div className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</div>
+      <div className="text-sm font-semibold tabular-nums" style={{ color: color || "var(--text-primary)" }}>{value}</div>
+    </div>
+  );
+  return (
+    <ProfileSection title="Trade market" aside={<a href="#/market" className="underline">Trading Floor</a>}>
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xs" style={{ color: "var(--text-muted)" }}>{nflFormatLabel(format)}</div>
+          <div className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{fmtValue(row.value)}</div>
+          <div className="text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
+            #{row.rank} · {row.position}{row.posRank}{" "}<span style={{ color: changeColor(row.d30) }}>{fmtChange(row.d30)}</span> in 30 days
+          </div>
+        </div>
+        {points.length >= 2 && (
+          <div className="flex flex-col items-end gap-0.5">
+            <Sparkline points={points} color={trendColor(points)} width={160} height={36} />
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>last {points.length} weeks</span>
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-3 pt-1">
+        {stat("Trades", <>{row.trades >= 10 ? Math.round(row.trades) : row.trades.toFixed(1)}{row.thin && <span className="text-xs font-normal ml-1" style={{ color: "var(--text-muted)" }}>thin</span>}</>)}
+        {stat("Model", row.model == null ? "–" : <>{fmtValue(row.model)} <span className="text-xs font-normal" style={{ color: changeColor(row.gap) }}>{fmtChange(row.gap)}</span></>)}
+        {stat("vs FantasyCalc", row.fcGap == null ? "–" : `${row.fcGap > 0 ? "+" : row.fcGap < 0 ? "−" : ""}${Math.abs(row.fcGap) || "even"}`, row.fcGap ? changeColor(row.fcGap) : undefined)}
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        What managers pay for him in real Sleeper trades. Trades is how many (recency-weighted) back the value; vs FantasyCalc is
+        how many spots higher (+) or lower the market ranks him among players.
+      </p>
+    </ProfileSection>
+  );
+}
+
 function NflMarket({ data, settings, setSettings }) {
   const own = data.source?.key === "own";
   const format = `${settings.mode}-${settings.qb}`;
@@ -6534,6 +6595,7 @@ function NflMarket({ data, settings, setSettings }) {
   const stats = window.NFL_MARKET?.stats?.[format];
   const [db, list] = useRecentTrades(loadNflTrades, own, data.rows, format);
   const dynasty = settings.mode === "dynasty";
+  const history = useDataFile(loadNflMarketHistory, own && dynasty); // weekly, dynasty only
   const posOptions = dynasty ? [...NFL_MARKET_POSITIONS, { key: "PICK", label: "Picks" }] : NFL_MARKET_POSITIONS;
   useEffect(() => { if (!dynasty && pos === "PICK") setPos("ALL"); }, [dynasty, pos]);
 
@@ -6590,7 +6652,8 @@ function NflMarket({ data, settings, setSettings }) {
               <MarketVsConsensus rows={rows} />
             </div>
           )}
-          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={false} sport="nfl" weekly={false} consensus />
+          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={false} sport="nfl" weekly={false} consensus
+            history={dynasty ? history : null} historyKey={format} />
 
           <LatestTrades sport="nfl" db={db} list={list} format={format} />
         </>
@@ -6876,6 +6939,20 @@ function tradeDeskLink(t, sport, format) {
   const ids = t.sides.map((s) => s.map((a) => encodeURIComponent(a.rowId)).join(",")).join("|");
   return sport === "nba" ? `#nbatrade=${ids}~${format}` : `#trade=${ids}`;
 }
+// Each side's share of the trade's plain total, as a thin two-color bar (no verdict).
+function TradeBalanceBar({ sides }) {
+  const totals = sides.map((s) => s.reduce((sum, a) => sum + (a.value || 0), 0));
+  const all = totals[0] + totals[1];
+  if (!all) return null;
+  const share = Math.round((totals[0] / all) * 100);
+  return (
+    <div className="flex h-1 rounded-full overflow-hidden" role="img" aria-label={`Side A ${share}% of the total value, Side B ${100 - share}%`}
+      title={`Side A ${share}% · Side B ${100 - share}% of the plain total`}>
+      <span style={{ width: `${share}%`, background: SIDE_COLOR.A }} />
+      <span style={{ width: `${100 - share}%`, background: SIDE_COLOR.B }} />
+    </div>
+  );
+}
 function TradeDbCard({ t, sport = "nfl", format, highlight = [], compact = false }) {
   const link = tradeDeskLink(t, sport, format);
   const when = new Date(t.ts);
@@ -6889,6 +6966,7 @@ function TradeDbCard({ t, sport = "nfl", format, highlight = [], compact = false
         </span>
         <span>{t.size}-team</span>
       </div>
+      <TradeBalanceBar sides={t.sides} />
       <div className={compact ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 gap-3"}>
         {t.sides.map((s, si) => {
           const total = s.reduce((sum, a) => sum + (a.value || 0), 0);
@@ -8902,7 +8980,10 @@ function MarketMovers({ rows, sport = "nba" }) {
 // false) but compares each player with FantasyCalc (consensus: the vs FC
 // column, market rank against FantasyCalc's). The trade count links to the
 // asset's recent trades on the Trade Ledger.
-function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly = true, consensus = false }) {
+// history / historyKey: the market history file and format, for the 12-week trend column.
+const MARKET_TREND_WEEKS = 12;
+function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly = true, consensus = false, history, historyKey }) {
+  const trend = !!(history && historyKey && history[historyKey]);
   const [limit, setLimit] = useState(NBA_MARKET_PAGE);
   const shown = rows.slice(0, limit);
   const top = rows.length ? Math.max(...rows.map((r) => r.value)) : 1;
@@ -8919,6 +9000,7 @@ function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly
               <th className={th + " text-left"} style={head}>Pos</th>
               <SortHeader label="Age" active={sortBy === "age"} onClick={() => setSortBy("age")} className="hidden sm:table-cell" />
               <SortHeader label="Value" active={sortBy === "value"} onClick={() => setSortBy("value")} />
+              {trend && <th className={th + " text-center hidden md:table-cell"} style={head} title={`Value over the last ${MARKET_TREND_WEEKS} weeks`}>{MARKET_TREND_WEEKS} wk</th>}
               {weekly && <SortHeader label="7D" active={sortBy === "d7"} onClick={() => setSortBy("d7")} className="hidden sm:table-cell" />}
               <SortHeader label="30D" active={sortBy === "d30"} onClick={() => setSortBy("d30")} />
               <SortHeader label="Trades" active={sortBy === "trades"} onClick={() => setSortBy("trades")} className="hidden md:table-cell" />
@@ -8929,12 +9011,12 @@ function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td colSpan={11} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody matches.</td></tr>
+              <tr><td colSpan={12} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody matches.</td></tr>
             )}
             {shown.map((r, i) => (
               <React.Fragment key={r.id}>
                 {showTiers && (i === 0 || shown[i - 1].tier !== r.tier) && (
-                  <tr><td colSpan={11} className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--page-hue, var(--text-muted))" }}>Tier {r.tier}</td></tr>
+                  <tr><td colSpan={12} className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--page-hue, var(--text-muted))" }}>Tier {r.tier}</td></tr>
                 )}
                 <tr className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{r.rank}</td>
@@ -8951,6 +9033,10 @@ function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly
                       <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{fmtValue(r.value)}</span>
                     </span>
                   </td>
+                  {trend && (() => {
+                    const pts = historyPoints(history, historyKey, r.historyId ?? r.id, MARKET_TREND_WEEKS);
+                    return <td className="px-3 py-1 hidden md:table-cell"><div className="flex justify-center"><Sparkline points={pts} color={trendColor(pts)} width={64} height={20} /></div></td>;
+                  })()}
                   {weekly && <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden sm:table-cell" style={{ color: changeColor(r.d7) }}>{fmtChange(r.d7)}</td>}
                   <td className="px-3 py-1.5 text-right tabular-nums text-xs" style={{ color: changeColor(r.d30) }}>{fmtChange(r.d30)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: "var(--text-secondary)" }}
@@ -8980,6 +9066,7 @@ function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly
 function NbaMarket({ data }) {
   const [format, setFormat] = useNbaMarketFormat();
   const { market, rows, db, list } = useNbaRecentTrades(true, format, data.players);
+  const history = useDataFile(loadNbaMarketHistory, !!market);
   const [pos, setPos] = useState("ALL");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("value");
@@ -9032,7 +9119,8 @@ function NbaMarket({ data }) {
           )}
 
           {pos === "ALL" && !query && <MarketMovers rows={rows} />}
-          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={sortBy === "value" && !query} />
+          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={sortBy === "value" && !query}
+            history={history} historyKey={format} />
           <LatestTrades sport="nba" db={db} list={list} format={format} />
         </>
       )}
@@ -9051,8 +9139,7 @@ function NbaMarketProfile({ id, players }) {
   const rowsBy = (f) => nbaMarketRows(market, f, players);
   const cells = NBA_MARKET_FORMATS.map((f) => ({ ...f, row: rowsBy(f.key).find((r) => r.id === id) }));
   if (!cells.some((c) => c.row)) return null;
-  const series = history?.[format]?.[id] || [];
-  const points = (history?.dates || []).map((t, i) => ({ t, v: series[i] })).filter((p) => p.v != null);
+  const points = historyPoints(history, format, id);
   return (
     <>
     <ProfileSection title="Trade market" aside={<a href="#/nba/market" className="underline">Trading Floor</a>}>
@@ -10386,6 +10473,8 @@ function NflProfile({ dynasty, settings }) {
           </>
         )}
       </ProfileSection>
+
+      <NflMarketProfile id={id} dynasty={dynasty} settings={settings} />
 
       <ValueHistory id={id} fcId={row?.fcId} settings={settings} />
 

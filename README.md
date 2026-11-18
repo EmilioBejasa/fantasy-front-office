@@ -548,7 +548,8 @@ listed newest first with the date and time, league size and what each side
 got. The page shows the last 30 days (`TRADE_DB_DAYS`) in your format, each
 player and pick at today's value with each side's plain total (no stud
 adjustment or roster spot credit; open the trade on the Trade Desk for the
-verdict). Filter by players and picks: the search's dropdown lists every one
+verdict); a thin two-color bar shows each side's share of the plain total
+(`TradeBalanceBar`). Filter by players and picks: the search's dropdown lists every one
 in those trades, most traded first, with picks by round in any slot ("2027
 1st") or by slot; choose several (a trade must have all of them, on either
 side) and take any out again with its ✕. The search is kept in the link
@@ -597,7 +598,13 @@ and TE premium from the shared league settings):
   trades on the Trade Ledger), the fit's model value and the gap to it, and
   **vs FC**: FantasyCalc's rank among players minus the market's, so + means
   managers pay more than FantasyCalc says (`nflMarketRows`). Only what the
-  market lists is shown; TE premium lifts values but not the model.
+  market lists is shown; TE premium lifts values but not the model. A
+  **12 wk** sparkline per player (md+ widths; dynasty only, since
+  `data/nfl-market-history.js` keeps no redraft history) comes from the
+  weekly history (`historyPoints`), green when up over those weeks.
+- **Profiles** get a *Trade market* box (`NflMarketProfile`): value, rank,
+  30-day change, trades behind the value, the model's value, vs FantasyCalc
+  and the 12-week sparkline.
 - **Risers and fallers** (`MarketMovers`) and **Market vs FantasyCalc**
   (`MarketVsConsensus`): the biggest 30-day moves and rank gaps among
   players worth 1,500+.
@@ -1051,7 +1058,8 @@ real trades, like KeepTradeCut's tradesourced values:
   with tiers, filters and sorts, risers and fallers, the trade count (*thin*
   under 5), market vs model, and the latest Trade Ledger trades at today's
   values (`LatestTrades`, shared with football). Player profiles get a market box (`NbaMarketProfile`)
-  with the player's recent trades under it. The table (`MarketTable`) and
+  with the player's recent trades under it. The table (`MarketTable`, with
+  the 12-week sparkline column from `data/nba-market-history.js`) and
   movers are shared with the football Trading Floor, and each trade count
   links to that asset's trades on the Trade Ledger.
 

@@ -832,6 +832,15 @@ test("nflMarketRows: listed assets only, model and trades from the fit, rank aga
   assert.deepEqual(plain(app.nflMarketRows(rows, { mode: "redraft", qb: "sf" }, market)), []);
 });
 
+test("historyPoints: gaps left out, the last N weeks", () => {
+  const h = { dates: ["2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22"], "dynasty-sf": { a: [null, 100, 120, 130] } };
+  assert.deepEqual(plain(app.historyPoints(h, "dynasty-sf", "a")).map((p) => p.v), [100, 120, 130]);
+  assert.deepEqual(plain(app.historyPoints(h, "dynasty-sf", "a", 2)), [{ t: "2026-10-15", v: 120 }, { t: "2026-10-22", v: 130 }]);
+  assert.deepEqual(plain(app.historyPoints(h, "redraft-sf", "a")), []);
+  assert.deepEqual(plain(app.historyPoints(undefined, "dynasty-sf", "a")), []);
+  assert.equal(app.trendColor([{ v: 1 }, { v: 2 }]), "var(--trend-up)");
+});
+
 test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());

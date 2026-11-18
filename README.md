@@ -95,10 +95,14 @@ The page is laid out like a website, themed as an **executive front office**
 
   The nav, home folder tabs, page labels and browser tab titles use the room
   name. The page heading still says what the tool is.
-- **Home page** (the Lobby, `#/`): a "Run your fantasy team like a GM"
-  intro and buttons into the Trade Desk and Scoreboard. Each tool is a
-  **manila folder** card with its room on the tab. Below them are the
-  biggest 30-day risers in dynasty value.
+- **Home page** (the Lobby, `#/`): a dashboard for the chosen sport. A short
+  "Run your fantasy team like a GM" intro with buttons into the Trade Desk and
+  waivers, a link to your saved league (or a prompt to connect one), then
+  **Today on the Trading Floor** (`HomeDashboard`): the market's 30-day risers
+  and fallers, football's Market vs FantasyCalc, and the three latest real
+  trades. The trade files (and basketball's market and player list) load only
+  for this sport, the trades once their row nears the screen (`useInView`).
+  Last, that sport's tools as compact cards (`FeatureCard`) by room group.
 - **Sport switch:** a Football | Basketball control next to the logo
   (`SportSwitch`), green for football and orange for basketball like
   Sleeper's sport colors (`color` in `SPORTS`). The same color carries

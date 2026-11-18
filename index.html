@@ -80,12 +80,11 @@
     --hue-blue: #2a78d6; --hue-orange: #eb6834; --hue-aqua: #1baf7a; --hue-magenta: #e87ba4;
     --hue-violet: #4a3aa7; --hue-red: #e34948; --hue-yellow: #eda100;
     --trend-up: #0f8a4f;
-    /* Office: navy header, brass trim, manila folders. */
+    /* Office: navy header and brass trim. */
     --header-bg: #14213d;
     --header-text: #f5f1e6;
     --brass: #a9822f;
     --brass-grad-a: #8a6420; --brass-grad-b: #c39a3c;
-    --folder: #f6ead0;
     /* Sport accent, Sleeper-style: green football, orange basketball
        (data-sport on <html>). Used for the header trim, active nav, main
        buttons, links and hovers; the logo and headline stay brass. */
@@ -122,7 +121,6 @@
     --header-text: #f5f1e6;
     --brass: #d4ae55;
     --brass-grad-a: #d4ae55; --brass-grad-b: #f0d68c;
-    --folder: #17223a;
     --sport-nfl: #3ecf8e; --sport-nba: #ff8a3d;
   }
   @media (prefers-color-scheme: dark) {
@@ -154,8 +152,7 @@
       --header-text: #f5f1e6;
       --brass: #d4ae55;
       --brass-grad-a: #d4ae55; --brass-grad-b: #f0d68c;
-      --folder: #17223a;
-      --sport-nfl: #3ecf8e; --sport-nba: #ff8a3d;
+        --sport-nfl: #3ecf8e; --sport-nba: #ff8a3d;
     }
   }
   * { box-sizing: border-box; }
@@ -186,16 +183,9 @@
     font: 800 11px/1 Inter, sans-serif; letter-spacing: .1em; padding: 8px 9px; border-radius: 4px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -1px 0 rgba(0, 0, 0, .25), 0 1px 3px rgba(0, 0, 0, .45); }
 
-  /* Manila folder cards with a labeled tab. */
-  .folder { position: relative; margin-top: 18px; background: var(--folder) !important; border-top-left-radius: 0 !important; }
-  .folder::before { content: attr(data-tab); position: absolute; left: -1px; top: -19px; height: 19px; padding: 5px 12px 0;
-    border: 1px solid var(--border); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--folder);
-    font: 700 9.5px/1 Inter, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted);
-    transition: border-color .15s; }
   .card-link { transition: border-color .15s, transform .15s, box-shadow .15s; }
   .card-link:hover { border-color: var(--card-hue, var(--sport)) !important; transform: translateY(-3px);
     box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.45); }
-  .card-link.folder:hover::before { border-color: var(--card-hue, var(--sport)); }
   .card-link:hover .card-arrow { transform: translateX(3px); }
   .card-arrow { transition: transform .15s; display: inline-block; }
 
@@ -6539,7 +6529,7 @@ function MarketVsConsensus({ rows }) {
 
 // A Trading Floor's latest trades: the newest Trade Ledger cards, with a
 // link to the rest. db, list: useRecentTrades'.
-function LatestTrades({ sport, db, list, format }) {
+function LatestTrades({ sport, db, list, format, limit = MARKET_FEED }) {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -6552,7 +6542,7 @@ function LatestTrades({ sport, db, list, format }) {
         : db === null ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>The trade database isn't available right now.</p>
         : !list.length ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>No trades in the last {TRADE_DB_DAYS} days yet.</p> : (
         <div className="grid gap-2 md:grid-cols-2">
-          {list.slice(0, MARKET_FEED).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport={sport} format={format} />)}
+          {list.slice(0, limit).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport={sport} format={format} />)}
         </div>
       )}
     </section>
@@ -10829,7 +10819,7 @@ function NbaProfile({ data, settings }) {
 // Each page has its own URL hash, so the back button, bookmarks and reloads
 // work. A trade link (#trade=… or #nbatrade=…, see readTradeHash) is that
 // sport's Trade Desk too. Every tool is a room in the office: `short` is the
-// room (nav, folder tabs, page label), `label` says what the tool is.
+// room (nav, home directory, page label), `label` says what the tool is.
 // `color` is each sport's Sleeper-style accent (green football, orange basketball).
 const SPORTS = [
   { key: "nfl", label: "Football", color: "#1fa463", blurb: "Weekly results, waivers and injuries for this season, plus dynasty values, a trade desk and the 2027 class." },
@@ -11460,27 +11450,95 @@ function SiteHeader({ page, navigate, sport, setSport, theme, toggleTheme, onSea
   );
 }
 
+// One tool on the home page's directory: a dense row with its icon, name,
+// room and a one-line blurb.
 function FeatureCard({ p, navigate }) {
   const { hue, icon } = PAGE_STYLE[p.key];
   return (
     <a href={p.hash} onClick={(e) => { e.preventDefault(); navigate(p.key); }}
-      className="card-link folder rounded-xl border p-4 sm:p-5 flex flex-row sm:flex-col items-start gap-3" data-tab={p.short}
-      style={{ borderColor: "var(--border)", "--card-hue": hue }}>
-      <span className="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center"
+      className="card-link rounded-lg border px-3 py-2.5 flex items-center gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)", "--card-hue": hue }}>
+      <span className="w-8 h-8 shrink-0 rounded-md flex items-center justify-center"
         style={{ background: `color-mix(in srgb, ${hue} 16%, transparent)`, color: hue }}>
-        <Svg size={20}>{icon}</Svg>
+        <Svg size={16}>{icon}</Svg>
       </span>
-      {/* On phones a compact row (icon, name, one-line blurb); the full card from sm up. */}
-      <span className="flex flex-col gap-1 sm:gap-3 flex-1 min-w-0">
-        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{p.label}</span>
-        <span className="text-sm line-clamp-2 sm:line-clamp-none" style={{ color: "var(--text-secondary)" }}>{p.blurb}</span>
+      <span className="flex flex-col min-w-0">
+        <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+          {p.label} <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>· {p.short}</span>
+        </span>
+        <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{p.blurb}</span>
       </span>
-      <span className="hidden sm:inline text-sm font-semibold" style={{ color: hue }}>Open <span className="card-arrow">→</span></span>
     </a>
   );
 }
 
-function HomePage({ navigate, scores, dynasty, sport, setSport }) {
+// [ref, seen]: whether the element has come within `margin` of the screen
+// yet (stays true after). Without IntersectionObserver it's true at once.
+function useInView(margin = "200px") {
+  const ref = useRef(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (seen) return;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setSeen(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); }
+    }, { rootMargin: margin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  return [ref, seen];
+}
+
+// The home page's market at a glance, for the chosen sport: risers and
+// fallers, (football) where managers and FantasyCalc disagree, and the latest
+// real trades. Football's values are already loaded; the trade files (and
+// basketball's market) load only once their row is near the screen.
+const HOME_TRADES = 3;
+function HomeDashboard({ sport, dynasty, nba }) {
+  const [tradesRef, tradesSeen] = useInView();
+  const isNfl = sport === "nfl";
+  const own = dynasty.source?.key === "own";
+  const nflFormat = `${dynasty.settings.mode}-${dynasty.settings.qb}`;
+  const nflRows = useMemo(() => (isNfl && own ? nflMarketRows(dynasty.rows, dynasty.settings) : []),
+    [isNfl, own, dynasty.rows, dynasty.settings.mode, dynasty.settings.qb]);
+  const [nflDb, nflList] = useRecentTrades(loadNflTrades, isNfl && own && tradesSeen, dynasty.rows, nflFormat);
+  const [nbaFormat] = useNbaMarketFormat();
+  const nbaMarket = useDataFile(loadNbaMarket, !isNfl);
+  const nbaRows = useMemo(() => (!isNfl && nbaMarket ? nbaMarketRows(nbaMarket, nbaFormat, nba.players) : []), [isNfl, nbaMarket, nbaFormat, nba.players]);
+  const nbaTrades = useNbaRecentTrades(!isNfl && tradesSeen, nbaFormat, nba.players);
+  const rows = isNfl ? nflRows : nbaRows;
+  const formatLabel = isNfl ? describeSettings(dynasty.settings) : nbaFormat;
+  if (isNfl && !own) return null;
+  if (!isNfl && nbaMarket === null) return null;
+  return (
+    <section className="flex flex-col gap-5">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2.5" style={{ color: "var(--text-primary)" }}>
+            <span className="w-1.5 h-6 rounded-full" style={{ background: "var(--hue-magenta)" }} />Today on the Trading Floor
+          </h2>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>What managers are paying in real Sleeper {formatLabel} trades.</p>
+        </div>
+        <a href={isNfl ? PAGE_BY_KEY.market.hash : PAGE_BY_KEY["nba-market"].hash} className="text-sm font-medium" style={{ color: "var(--sport)" }}>Trading Floor →</a>
+      </div>
+      {rows.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading the market…</p> : (
+        <>
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Risers and fallers</h3>
+            <MarketMovers rows={rows} sport={sport} />
+          </section>
+          {isNfl && <MarketVsConsensus rows={rows} />}
+        </>
+      )}
+      <div ref={tradesRef}>
+        {isNfl ? <LatestTrades sport="nfl" db={tradesSeen ? nflDb : undefined} list={nflList} format={nflFormat} limit={HOME_TRADES} />
+          : <LatestTrades sport="nba" db={tradesSeen ? nbaTrades.db : undefined} list={nbaTrades.list} format={nbaFormat} limit={HOME_TRADES} />}
+      </div>
+    </section>
+  );
+}
+
+function HomePage({ navigate, scores, dynasty, nba, sport, setSport }) {
   const myLeague = React.useContext(MyLeagueContext);
   const weeks = playedWeeks(scores.scores);
   const latestWeek = weeks[weeks.length - 1];
@@ -11495,13 +11553,10 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [sport]);
-  const players = dynasty.rows.filter((r) => r.position !== "PICK");
-  // Biggest 30-day risers among players worth a real roster spot.
-  const risers = players.filter((r) => r.value >= 1500 && r.trend30 > 0).sort((a, b) => b.trend30 - a.trend30).slice(0, 5);
-
+  const sportInfo = SPORTS.find((x) => x.key === sport);
   return (
-    <div className="flex flex-col gap-12">
-      <section className="hero-glow -mx-4 px-4 pt-10 pb-4 sm:pt-16 text-center flex flex-col items-center gap-5">
+    <div className="flex flex-col gap-10">
+      <section className="hero-glow -mx-4 px-4 pt-8 pb-2 sm:pt-12 text-center flex flex-col items-center gap-4">
         <span className="text-xs font-semibold uppercase tracking-wider rounded-md border px-3 py-1"
           style={{ borderColor: "var(--sport)", color: "var(--sport)", background: "var(--surface-1)" }}>
           {sport === "nba"
@@ -11534,60 +11589,36 @@ function HomePage({ navigate, scores, dynasty, sport, setSport }) {
             <span style={{ color: "var(--brass)" }}>★</span> Your basketball league: {myLeague.nba.name} →
           </a>
         )}
+        {!myLeague[sport] && (
+          <a href={sport === "nba" ? NBA_LEAGUES_HASH : LEAGUES_HASH} className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            <span style={{ color: "var(--brass)" }}>☆</span> Connect your Sleeper {sport === "nba" ? "basketball " : ""}league for your matchup, standings and trade ideas →
+          </a>
+        )}
         {/* Phones have no header switch; this one also picks the tab bar's rooms. */}
         <div className="md:hidden">
           <SportSwitch sport={sport} page="home" navigate={navigate} setSport={setSport} />
         </div>
       </section>
 
-      {/* The chosen sport first, matching the phone tab bar. */}
-      {[...SPORTS].sort((a, b) => (b.key === sport) - (a.key === sport)).map((s) => (
-        <section key={s.key} className="flex flex-col gap-5">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2.5" style={{ color: "var(--text-primary)" }}>
-              <span className="w-1.5 h-6 rounded-full" style={{ background: s.key === "nfl" ? "var(--hue-blue)" : "var(--hue-orange)" }} />{s.label}
-            </h2>
-            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>{s.blurb}</p>
-          </div>
-          {SPORT_GROUPS[s.key].map((g) => (
-            <div key={g} className="flex flex-col gap-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{g}</h3>
-              <div className={`grid gap-x-4 gap-y-1 sm:gap-4 sm:grid-cols-2 ${sportPages(s.key, g).length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
-                {sportPages(s.key, g).map((p) => <FeatureCard key={p.key} p={p} navigate={navigate} />)}
-              </div>
-            </div>
-          ))}
-        </section>
-      ))}
+      <HomeDashboard sport={sport} dynasty={dynasty} nba={nba} />
 
-      {risers.length > 0 && (
-        <section className="flex flex-col gap-4">
-          <div className="flex items-baseline justify-between gap-3 flex-wrap">
-            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2.5" style={{ color: "var(--text-primary)" }}>
-              <span className="w-1.5 h-5 rounded-full" style={{ background: "var(--trend-up)" }} />Dynasty risers this month
-            </h2>
-            <a href={VALUE_LIST_HASH} className="text-sm font-medium" style={{ color: "var(--sport)" }}>All values →</a>
+      {/* The chosen sport's tools; the header (or the switch above on phones) picks the sport. */}
+      <section className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2.5" style={{ color: "var(--text-primary)" }}>
+            <span className="w-1.5 h-6 rounded-full" style={{ background: sport === "nfl" ? "var(--hue-blue)" : "var(--hue-orange)" }} />{sportInfo.label} tools
+          </h2>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>{sportInfo.blurb}</p>
+        </div>
+        {SPORT_GROUPS[sport].map((g) => (
+          <div key={g} className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{g}</h3>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {sportPages(sport, g).map((p) => <FeatureCard key={p.key} p={p} navigate={navigate} />)}
+            </div>
           </div>
-          <ol className="rounded-xl border divide-y" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-            {risers.map((r, i) => (
-              <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderColor: "var(--border)" }}>
-                <span className="flex items-center gap-3 min-w-0">
-                  <span className="text-sm tabular-nums w-4 text-right" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-                  <span className="min-w-0 truncate">
-                    <PlayerLink id={r.id}>{r.name}</PlayerLink>{" "}
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}><PosBadge pos={r.position} /> {r.team || "FA"}</span>
-                  </span>
-                </span>
-                <span className="flex items-center gap-4 shrink-0 tabular-nums text-sm">
-                  <span style={{ color: "var(--text-secondary)" }}>{fmtValue(r.value)}</span>
-                  <span className="font-semibold" style={{ color: "var(--trend-up)" }}>▲ {r.trend30.toLocaleString()}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>30-day change in Trade Market football value, {describeSettings(dynasty.settings)}.</p>
-        </section>
-      )}
+        ))}
+      </section>
     </div>
   );
 }
@@ -11692,7 +11723,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   useSearchShortcut(() => setSearchOpen(true));
   const [nbaWanted, setNbaWanted] = useState(false);
-  const nba = useNbaData(current.sport === "nba" || nbaWanted);
+  const nba = useNbaData(current.sport === "nba" || nbaWanted || (page === "home" && sport === "nba")); // the home dashboard's market needs the player list
   const nbaProps = { data: nba, settings: nbaSettings, setSettings: setNbaSettings };
   const myLeague = useMyLeagueState();
   const alerts = useRosterAlerts(myLeague, { nfl: sleeperPlayers, nba: nba.status === "live" ? nba.players : null });
@@ -11705,7 +11736,7 @@ function App() {
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
       <SiteHeader page={page} navigate={navigate} sport={sport} setSport={setSport} theme={theme} toggleTheme={toggleTheme}
         onSearch={() => setSearchOpen(true)} alerts={alerts} />
-      {/* Each page's own color (its folder and nav color) fills its controls. */}
+      {/* Each page's own color (its home card and nav color) fills its controls. */}
       <main id="main" tabIndex={-1} className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 flex flex-col gap-2 outline-none" style={{ "--page-hue": PAGE_STYLE[page]?.hue }}>
         {current.group && (
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: PAGE_STYLE[page].hue }}>
@@ -11713,7 +11744,7 @@ function App() {
           </p>
         )}
         <RoomBoundary key={page} room={current.short} onHome={() => navigate("home")}>
-        {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} sport={sport} setSport={setSport} />}
+        {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} nba={nba} sport={sport} setSport={setSport} />}
         {page === "weekly" && <WeeklyScores players={liveScores.players} data={liveScores} />}
         {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} values={dynasty.rows} />}
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} sleeperPlayers={sleeperPlayers} />}

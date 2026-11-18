@@ -841,6 +841,13 @@ test("historyPoints: gaps left out, the last N weeks", () => {
   assert.equal(app.trendColor([{ v: 1 }, { v: 2 }]), "var(--trend-up)");
 });
 
+test("tradeDeskTab: movers on an empty desk, then the remembered tab or real trades", () => {
+  assert.equal(app.tradeDeskTab("calculators", false), "movers");
+  assert.equal(app.tradeDeskTab(null, true), "trades");
+  assert.equal(app.tradeDeskTab("calculators", true), "calculators");
+  assert.equal(app.tradeDeskTab("bogus", true), "trades");
+});
+
 test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());

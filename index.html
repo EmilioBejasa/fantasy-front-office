@@ -7072,9 +7072,20 @@ function PlayerTrades({ sport, playerId, db, list, format, label, compact = fals
   );
 }
 
-// Under a Trade Desk: real trades with the assets on it (tradeDbComparables).
-function TradeComparables({ sport, db, list, sides, format, label }) {
-  const { trades, total, keys } = useMemo(() => tradeDbComparables(list, sides), [list, sides]);
+// A Trade Desk tab's empty state.
+function TradeDeskHint({ children }) {
+  return (
+    <p className="text-sm rounded-lg border px-4 py-6 text-center" style={{ borderColor: "var(--border)", background: "var(--surface-1)", color: "var(--text-muted)" }}>
+      {children}
+    </p>
+  );
+}
+
+// Under a Trade Desk: real trades with the assets on it (tradeDbComparables,
+// or `result` when the page already has it).
+function TradeComparables({ sport, db, list, sides, format, label, result }) {
+  const own = useMemo(() => (result ? null : tradeDbComparables(list, sides)), [result, list, sides]);
+  const { trades, total, keys } = result || own;
   if (!sides[0].length && !sides[1].length) return null;
   return (
     <section className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
@@ -7181,11 +7192,36 @@ function NbaTradeDatabase({ data }) {
   );
 }
 
+// The football Trade Desk's lower half is tabbed so the verdict stays in
+// focus: real trades like this one, the other calculators' verdicts, and
+// the month's movers. An empty desk opens on the movers (to start a deal);
+// once there's a deal, the tab last picked (remembered per browser), or
+// real trades.
+const TRADE_DESK_TAB_KEY = "ff-valuediff:trade-desk-tab";
+const TRADE_DESK_TABS = ["trades", "calculators", "movers"];
+const tradeDeskTab = (saved, hasDeal) => (!hasDeal ? "movers" : TRADE_DESK_TABS.includes(saved) ? saved : "trades");
+
 function TradeCalculator({ data, settings, setSettings }) {
   const [sides, setSides] = useState(readTradeHash);
   useEffect(() => { writeTradeHash(sides); }, [sides]);
   const tradeFormat = `${settings.mode}-${settings.qb}`;
-  const [tradesDb, tradeList] = useRecentTrades(loadNflTrades, sides[0].length + sides[1].length > 0, data.rows, tradeFormat);
+  const hasDeal = sides[0].length + sides[1].length > 0;
+  const [tradesDb, tradeList] = useRecentTrades(loadNflTrades, hasDeal, data.rows, tradeFormat);
+  const comparables = useMemo(() => tradeDbComparables(tradeList, sides), [tradeList, sides]);
+  const [savedTab, setSavedTab] = useState(() => { try { return localStorage.getItem(TRADE_DESK_TAB_KEY); } catch (e) { return null; } });
+  const [override, setOverride] = useState(null); // a tab picked on an empty desk, not remembered
+  useEffect(() => { setOverride(null); }, [hasDeal]);
+  const tab = override || tradeDeskTab(savedTab, hasDeal);
+  const pickTab = (t) => {
+    if (!hasDeal) { setOverride(t); return; }
+    setSavedTab(t);
+    try { localStorage.setItem(TRADE_DESK_TAB_KEY, t); } catch (e) {}
+  };
+  const tabOptions = [
+    { key: "trades", label: hasDeal && tradesDb ? `Real trades (${comparables.total.toLocaleString()})` : "Real trades" },
+    { key: "calculators", label: "Other calculators" },
+    { key: "movers", label: "Movers" },
+  ];
 
   const byId = useMemo(() => Object.fromEntries(data.rows.map((r) => [r.id, r])), [data.rows]);
   // A player can only be in the deal once; generic picks ("2027 1st") can repeat.
@@ -7246,11 +7282,16 @@ function TradeCalculator({ data, settings, setSettings }) {
 
       <TradeVerdict sides={sides} byId={byId} rows={data.rows} ctx={ctx} result={result} />
 
-      <MarketComparison sides={sides} byId={byId} rows={data.rows} settings={settings} result={result} source={data.source} />
-
-      <TradeComparables sport="nfl" db={tradesDb} list={tradeList} sides={sides} format={tradeFormat} label={nflFormatLabel(tradeFormat)} />
-
-      <TradeMovers rows={data.rows} inDeal={inDeal} onAdd={add} />
+      <div className="flex flex-col gap-3">
+        <div aria-label="More on this trade"><PillGroup options={tabOptions} value={tab} onChange={pickTab} scroll /></div>
+        {tab === "trades" && (hasDeal
+          ? <TradeComparables sport="nfl" db={tradesDb} list={tradeList} sides={sides} format={tradeFormat} label={nflFormatLabel(tradeFormat)} result={comparables} />
+          : <TradeDeskHint>Add players or picks to see real Sleeper trades with them.</TradeDeskHint>)}
+        {tab === "calculators" && (sides[0].length && sides[1].length
+          ? <MarketComparison sides={sides} byId={byId} rows={data.rows} settings={settings} result={result} source={data.source} />
+          : <TradeDeskHint>Add something to both sides to see how other trade calculators grade the deal.</TradeDeskHint>)}
+        {tab === "movers" && <TradeMovers rows={data.rows} inDeal={inDeal} onAdd={add} />}
+      </div>
     </div>
   );
 }

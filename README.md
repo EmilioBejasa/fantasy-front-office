@@ -613,7 +613,12 @@ and TE premium from the shared league settings):
 ### Trade Calculator
 
 Add players or picks to what each team gets. Each side shows its plain value,
-any adjustments, and an adjusted total. Trades that aren't one-for-one are
+any adjustments, and an adjusted total. Below the verdict, tabs keep the rest
+out of the way: **Real trades (n)** (recent Trade Ledger trades with the
+deal's assets), **Other calculators** (`MarketComparison`) and **Movers**
+(this month's risers and fallers, with +A / +B buttons). An empty desk opens
+on Movers; with a deal it opens on the tab last picked (`tradeDeskTab`,
+remembered in `ff-valuediff:trade-desk-tab`), else Real trades. Trades that aren't one-for-one are
 adjusted the way the big calculators do it (`evaluateTrade`, constants in
 `TRADE_FORMULA`):
 

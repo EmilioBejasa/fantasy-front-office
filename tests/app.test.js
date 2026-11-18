@@ -809,6 +809,29 @@ test("basketball trade links carry their market values (~dynasty)", () => {
   app.location.hash = "";
 });
 
+test("nflMarketRows: listed assets only, model and trades from the fit, rank against FantasyCalc", () => {
+  const rows = [
+    { id: "a", name: "Alpha", position: "WR", value: 9000, fcValue: 7000, trend30: 120, ktcListed: true },
+    { id: "b", name: "Bravo", position: "RB", value: 8000, fcValue: 9000, trend30: -50, ktcListed: true },
+    { id: "c", name: "Charlie", position: "QB", value: 5000, fcValue: 6000, ktcListed: false }, // FantasyCalc's only
+    { id: "fc-2027-1", name: "2027 1st", position: "PICK", value: 8500, fcValue: 5000, ktcListed: true },
+  ];
+  const market = { model: { dynasty: { sf: { a: 8000, b: 8200, "2027-1-mid": 7000 } } }, trades: { dynasty: { sf: { a: 12, b: 2 } } } };
+  const out = plain(app.nflMarketRows(rows, { mode: "dynasty", qb: "sf" }, market));
+  assert.deepEqual(out.map((r) => r.id), ["a", "fc-2027-1", "b"]);
+  const [a, pick, b] = out;
+  assert.equal(a.gap, 1000);
+  assert.equal(a.thin, false);
+  assert.equal(b.thin, true);
+  assert.equal(a.fcGap, 1);     // FantasyCalc has him 2nd among players, the market 1st
+  assert.equal(b.fcGap, -1);
+  assert.equal(pick.fcGap, null);
+  assert.equal(pick.model, 7000);
+  assert.equal(pick.ledgerKey, "p2027-1");
+  assert.equal(b.posRank, 1);
+  assert.deepEqual(plain(app.nflMarketRows(rows, { mode: "redraft", qb: "sf" }, market)), []);
+});
+
 test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());

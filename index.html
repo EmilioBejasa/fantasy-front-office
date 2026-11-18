@@ -6420,6 +6420,176 @@ function MarketComparison({ sides, byId, rows, settings, result, source }) {
   );
 }
 
+/* ---------- football Trading Floor ---------- */
+// The football Trade Market on its own page, like basketball's: the site's
+// own values (data/nfl-market.js, already the default value source) in your
+// format, with each asset's model value and trade count from the fit, its
+// 30-day change, and how far the market's rank is from FantasyCalc's. The
+// trade counts and the latest trades link into the Trade Ledger.
+const NFL_MARKET_DISAGREE_MIN = 1500; // the vs FantasyCalc lists start at this value
+const NFL_MARKET_POSITIONS = ["ALL", "QB", "RB", "WR", "TE"].map((p) => ({ key: p, label: p }));
+const NFL_MARKET_FEED = 6;
+
+// The Trade Ledger's key for a FantasyCalc pick row ("2027 1st (Early)" → "p2027-1-early").
+function pickLedgerKey(name) {
+  const p = window.FantasyCalc?.parsePick(name);
+  return p ? `p${p.year}-${p.round}${p.slot ? `-${p.slot}` : ""}` : null;
+}
+
+// The page's rows, best first, from the value rows (applyMarketValues): only
+// what the market lists, as { id, pick, name, position, team, age, value,
+// model, gap, trades, thin, d30, fcRank, fcGap (FantasyCalc's player rank −
+// the market's: + means managers pay more than FantasyCalc says), rank,
+// posRank, ledgerKey }.
+function nflMarketRows(rows, settings, market = window.NFL_MARKET) {
+  const model = market?.model?.[settings.mode]?.[settings.qb];
+  const trades = market?.trades?.[settings.mode]?.[settings.qb] || {};
+  if (!model) return [];
+  const players = rows.filter((r) => r.position !== "PICK");
+  const fcRank = {};
+  [...players].filter((r) => r.fcValue > 0).sort((a, b) => b.fcValue - a.fcValue).forEach((r, i) => { fcRank[r.id] = i + 1; });
+  const listed = rows.filter((r) => r.ktcListed).map((r) => {
+    const pick = r.position === "PICK";
+    const key = pick ? marketPickKey(r.name) : r.id;
+    const m = model[key] ?? null, n = trades[key] ?? 0;
+    return {
+      id: r.id, pick, name: r.name, position: r.position, team: r.team || null, age: r.age ?? null,
+      value: r.value, model: m, gap: m == null ? 0 : r.value - m, trades: n, thin: n < NBA_MARKET_THIN,
+      d30: r.trend30 || 0, d7: 0, fcRank: pick ? null : fcRank[r.id] ?? null, ledgerKey: pick ? pickLedgerKey(r.name) : r.id,
+    };
+  }).sort((a, b) => b.value - a.value);
+  const posCount = {};
+  let playerRank = 0;
+  return listed.map((r, i) => {
+    const mine = r.pick ? null : ++playerRank;
+    return {
+      ...r, rank: i + 1, posRank: r.pick ? null : (posCount[r.position] = (posCount[r.position] || 0) + 1),
+      fcGap: r.fcRank ? r.fcRank - mine : null,
+    };
+  });
+}
+
+function nflMarketView(rows, { pos = "ALL", query = "", sortBy = "value" }) {
+  const q = foldName(query.trim());
+  return rows
+    .filter((r) => (pos === "PICK" ? r.pick : pos === "ALL" || r.position === pos))
+    .filter((r) => !q || foldName(r.name).includes(q))
+    .sort(NBA_MARKET_SORTS[sortBy] || NBA_MARKET_SORTS.value);
+}
+
+// Where managers and FantasyCalc disagree most, among players worth
+// NFL_MARKET_DISAGREE_MIN+: the market's rank against FantasyCalc's.
+function MarketVsConsensus({ rows }) {
+  const players = rows.filter((r) => !r.pick && r.value >= NFL_MARKET_DISAGREE_MIN && r.fcGap);
+  const higher = players.filter((r) => r.fcGap > 0).sort((a, b) => b.fcGap - a.fcGap).slice(0, MOVERS_COUNT);
+  const lower = players.filter((r) => r.fcGap < 0).sort((a, b) => a.fcGap - b.fcGap).slice(0, MOVERS_COUNT);
+  const fmt = (r) => `${r.fcGap > 0 ? "+" : "−"}${Math.abs(r.fcGap)}`;
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Market vs FantasyCalc</h3>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Players managers rank higher or lower in real trades than FantasyCalc does, in spots among players. A player the
+          market likes more is pricier to get than FantasyCalc suggests; one it likes less can be a cheaper buy.
+        </p>
+      </div>
+      <MarketColumns sport="nfl" columns={[
+        { title: "Managers pay more", list: higher, color: "var(--trend-up)", fmt, empty: "No big gaps." },
+        { title: "Managers pay less", list: lower, color: "var(--series-red)", fmt, empty: "No big gaps." },
+      ]} />
+    </section>
+  );
+}
+
+function NflMarket({ data, settings, setSettings }) {
+  const own = data.source?.key === "own";
+  const format = `${settings.mode}-${settings.qb}`;
+  const [pos, setPos] = useState("ALL");
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState("value");
+  const rows = useMemo(() => (own ? nflMarketRows(data.rows, settings) : []), [own, data.rows, settings.mode, settings.qb]);
+  const view = useMemo(() => nflMarketView(rows, { pos, query, sortBy }), [rows, pos, query, sortBy]);
+  const stats = window.NFL_MARKET?.stats?.[format];
+  const [db, list] = useRecentTrades(loadNflTrades, own, data.rows, format);
+  const dynasty = settings.mode === "dynasty";
+  const posOptions = dynasty ? [...NFL_MARKET_POSITIONS, { key: "PICK", label: "Picks" }] : NFL_MARKET_POSITIONS;
+  useEffect(() => { if (!dynasty && pos === "PICK") setPos("ALL"); }, [dynasty, pos]);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <header>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Trade Market</h2>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+          What managers are actually paying in {describeSettings(settings)} trades on Sleeper, on a 0-9,999 scale like KeepTradeCut.
+        </p>
+        <AboutData>
+          These are the values the whole site uses by default (the War Room, Trade Desk and profiles), fit every morning from
+          real, completed trades in public Sleeper leagues
+          {window.NFL_MARKET?.stats?.leaguesKnown ? ` (${window.NFL_MARKET.stats.leaguesKnown.toLocaleString()} leagues found so far)` : ""}.
+          Every trade is a comparison: if managers keep giving B and C for A, A is worth about B and C together, and one star
+          beats a pile of depth. Recent trades count most, one league can't flood the numbers, and lopsided or giant trades are
+          left out. Each value is pulled toward the model's (stats, age and position), so a player traded only a few times stays
+          close to it: <strong>Trades</strong> says how much the market has spoken (fewer than {NBA_MARKET_THIN} is <em>thin</em>; click it
+          for those trades in the Trade Ledger), and <strong>vs Model</strong> shows where managers disagree with the numbers.{" "}
+          <strong>vs FC</strong> is FantasyCalc's rank for the player minus the market's, among players: + means managers pay more than
+          FantasyCalc says. The market has no league-size or scoring options; TE premium is this site's estimate on top (not on
+          the model).
+        </AboutData>
+      </header>
+
+      <LeagueSettings settings={settings} setSettings={setSettings} fields={["mode", "qb", "tep"]} />
+
+      {!own ? (
+        <p className="text-sm py-6 text-center" style={{ color: "var(--text-muted)" }}>The market file isn't available right now.</p>
+      ) : (
+        <>
+          <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
+            <LabeledControl label="Position"><PillGroup options={posOptions} value={pos} onChange={setPos} /></LabeledControl>
+            <LabeledControl label="Search">
+              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Player or pick"
+                aria-label="Search the market" className="rounded-md border px-3 py-1.5 text-sm w-44" style={inputStyle} />
+            </LabeledControl>
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {stats ? `${stats.trades.toLocaleString()} ${nflFormatLabel(format)} trades from ${stats.leagues.toLocaleString()} leagues · ` : ""}
+            updated {new Date(window.NFL_MARKET.updatedOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </p>
+          {stats?.building && (
+            <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)", color: "var(--text-secondary)" }}>
+              Still collecting {nflFormatLabel(format)} trades, so these are mostly the model's values for now.
+            </p>
+          )}
+          {pos === "ALL" && !query && (
+            <div className="flex flex-col gap-5">
+              <section className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Risers and fallers</h3>
+                <MarketMovers rows={rows} sport="nfl" />
+              </section>
+              <MarketVsConsensus rows={rows} />
+            </div>
+          )}
+          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={false} sport="nfl" weekly={false} consensus />
+
+          <section className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                Latest trades <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>· at today's values</span>
+              </h3>
+              {list.length > 0 && <a href={TRADE_DB_HASH.nfl} className="text-xs underline" style={{ color: "var(--text-muted)" }}>All {list.length.toLocaleString()} from the last {TRADE_DB_DAYS} days in the Trade Ledger</a>}
+            </div>
+            {db === undefined ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading trades…</p> : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {list.slice(0, NFL_MARKET_FEED).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport="nfl" format={format} />)}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 /* ---------- trade database (football and basketball) ---------- */
 // Every real trade behind the Trade Market (data/nfl-trades.js, by
 // scripts/refresh-nfl-market.js; basketball's data/nba-trades.js), with each
@@ -8607,6 +8777,7 @@ const NBA_MARKET_SORTS = {
   age: (a, b) => (a.age ?? 99) - (b.age ?? 99) || b.value - a.value,
   gap: (a, b) => b.gap - a.gap || b.value - a.value,
   trades: (a, b) => b.trades - a.trades || b.value - a.value,
+  fc: (a, b) => (b.fcGap ?? -Infinity) - (a.fcGap ?? -Infinity) || b.value - a.value,
 };
 const loadNbaMarket = () => loadDataScript("data/nba-market.js", "NBA_MARKET");
 const loadNflMarketHistory = () => loadDataScript("data/nfl-market-history.js", "NFL_MARKET_HISTORY");
@@ -8653,6 +8824,7 @@ function nbaMarketRows(market, format, players) {
       id, pick, name: pick ? nbaPickLabel(id, market.season) : p.name, position: pick ? "PICK" : p.position,
       positions: pick ? [] : p.positions || [p.position], team: pick ? null : p.team, age: pick ? null : p.age || null,
       status: pick ? null : p.status, value, model, gap: value - model, trades, thin: trades < NBA_MARKET_THIN, tier, d7, d30,
+      ledgerKey: pick ? `p${Number(market.season) + Number(id.split("-")[1])}-${id.split("-")[2]}` : id,
     };
   }).filter(Boolean).sort(NBA_MARKET_SORTS.value).map((r, i) => ({
     ...r, rank: i + 1, posRank: r.pick ? null : (posCount[r.position] = (posCount[r.position] || 0) + 1),
@@ -8672,25 +8844,25 @@ function nbaMarketView(rows, { pos = "ALL", query = "", sortBy = "value" }) {
 const fmtChange = (n) => (n > 0 ? `+${n.toLocaleString()}` : n < 0 ? n.toLocaleString() : "–");
 const changeColor = (n) => (n > 0 ? "var(--trend-up)" : n < 0 ? "var(--series-red)" : "var(--text-muted)");
 
-function NbaMarketMovers({ rows }) {
-  const players = rows.filter((r) => !r.pick && r.value >= NBA_MARKET_MOVERS_MIN && r.d30);
-  const rising = players.filter((r) => r.d30 > 0).sort((a, b) => b.d30 - a.d30).slice(0, MOVERS_COUNT);
-  const falling = players.filter((r) => r.d30 < 0).sort((a, b) => a.d30 - b.d30).slice(0, MOVERS_COUNT);
-  if (!rising.length && !falling.length) return null;
-  const column = (title, list, color) => (
+// Two short lists of market rows side by side (risers and fallers, or
+// where managers and FantasyCalc disagree). columns: [{ title, list, color,
+// fmt (the number on the right), empty }].
+function MarketColumns({ sport = "nba", columns }) {
+  if (!columns.some((c) => c.list.length)) return null;
+  const column = ({ title, list, color, fmt, empty }) => (
     <div className="flex flex-col gap-1">
       <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color }}>{title}</h4>
-      {list.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>No big moves this month.</p> : (
+      {list.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>{empty}</p> : (
         <ul className="flex flex-col">
           {list.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0 text-sm" style={{ borderColor: "var(--border)" }}>
               <span className="min-w-0 truncate">
-                <PlayerLink sport="nba" id={r.id} className="">{r.name}</PlayerLink>{" "}
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.position}{r.posRank} · {r.team}</span>
+                <PlayerLink sport={sport} id={r.id} className="">{r.name}</PlayerLink>{" "}
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.position}{r.posRank} · {r.team || "FA"}</span>
               </span>
               <span className="flex items-center gap-2 shrink-0 tabular-nums text-xs">
                 <span style={{ color: "var(--text-secondary)" }}>{fmtValue(r.value)}</span>
-                <span className="font-semibold w-12 text-right" style={{ color }}>{fmtChange(r.d30)}</span>
+                <span className="font-semibold w-12 text-right" style={{ color }}>{fmt(r)}</span>
               </span>
             </li>
           ))}
@@ -8700,13 +8872,28 @@ function NbaMarketMovers({ rows }) {
   );
   return (
     <div className="rounded-lg border p-4 grid gap-4 sm:grid-cols-2" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-      {column("Rising · 30 days", rising, "var(--trend-up)")}
-      {column("Falling · 30 days", falling, "var(--series-red)")}
+      {columns.map((c) => <React.Fragment key={c.title}>{column(c)}</React.Fragment>)}
     </div>
   );
 }
 
-function NbaMarketTable({ rows, sortBy, setSortBy, showTiers }) {
+// The biggest 30-day risers and fallers among players worth NBA_MARKET_MOVERS_MIN+.
+function MarketMovers({ rows, sport = "nba" }) {
+  const players = rows.filter((r) => !r.pick && r.value >= NBA_MARKET_MOVERS_MIN && r.d30);
+  const rising = players.filter((r) => r.d30 > 0).sort((a, b) => b.d30 - a.d30).slice(0, MOVERS_COUNT);
+  const falling = players.filter((r) => r.d30 < 0).sort((a, b) => a.d30 - b.d30).slice(0, MOVERS_COUNT);
+  const fmt = (r) => fmtChange(r.d30);
+  return <MarketColumns sport={sport} columns={[
+    { title: "Rising · 30 days", list: rising, color: "var(--trend-up)", fmt, empty: "No big moves this month." },
+    { title: "Falling · 30 days", list: falling, color: "var(--series-red)", fmt, empty: "No big moves this month." },
+  ]} />;
+}
+
+// The market table for either sport. Football has no 7-day change (weekly
+// false) but compares each player with FantasyCalc (consensus: the vs FC
+// column, market rank against FantasyCalc's). The trade count links to the
+// asset's recent trades on the Trade Ledger.
+function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly = true, consensus = false }) {
   const [limit, setLimit] = useState(NBA_MARKET_PAGE);
   const shown = rows.slice(0, limit);
   const top = rows.length ? Math.max(...rows.map((r) => r.value)) : 1;
@@ -8723,28 +8910,29 @@ function NbaMarketTable({ rows, sortBy, setSortBy, showTiers }) {
               <th className={th + " text-left"} style={head}>Pos</th>
               <SortHeader label="Age" active={sortBy === "age"} onClick={() => setSortBy("age")} className="hidden sm:table-cell" />
               <SortHeader label="Value" active={sortBy === "value"} onClick={() => setSortBy("value")} />
-              <SortHeader label="7D" active={sortBy === "d7"} onClick={() => setSortBy("d7")} className="hidden sm:table-cell" />
+              {weekly && <SortHeader label="7D" active={sortBy === "d7"} onClick={() => setSortBy("d7")} className="hidden sm:table-cell" />}
               <SortHeader label="30D" active={sortBy === "d30"} onClick={() => setSortBy("d30")} />
               <SortHeader label="Trades" active={sortBy === "trades"} onClick={() => setSortBy("trades")} className="hidden md:table-cell" />
               <th className={th + " text-right hidden md:table-cell"} style={head} title="The model's value: stats, age and games left">Model</th>
               <SortHeader label="vs Model" active={sortBy === "gap"} onClick={() => setSortBy("gap")} className="hidden md:table-cell" />
+              {consensus && <SortHeader label="vs FC" active={sortBy === "fc"} onClick={() => setSortBy("fc")} className="hidden md:table-cell" />}
             </tr>
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody matches.</td></tr>
+              <tr><td colSpan={11} className="px-3 py-6 text-center" style={{ color: "var(--text-muted)" }}>Nobody matches.</td></tr>
             )}
             {shown.map((r, i) => (
               <React.Fragment key={r.id}>
                 {showTiers && (i === 0 || shown[i - 1].tier !== r.tier) && (
-                  <tr><td colSpan={10} className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--page-hue, var(--text-muted))" }}>Tier {r.tier}</td></tr>
+                  <tr><td colSpan={11} className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--page-hue, var(--text-muted))" }}>Tier {r.tier}</td></tr>
                 )}
                 <tr className="border-b row-hover" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{r.rank}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap">
-                    <PlayerLink sport="nba" id={r.id} pos={r.position}>{r.name}</PlayerLink>{" "}
+                    {r.pick ? <span className="font-medium">{r.name}</span> : <PlayerLink sport={sport} id={r.id} pos={r.position}>{r.name}</PlayerLink>}{" "}
                     {r.team && <span className="text-xs" style={{ color: "var(--text-muted)" }}>{r.team}</span>}
-                    <NbaInjuryTag status={r.status} />
+                    {sport === "nba" && <NbaInjuryTag status={r.status} />}
                   </td>
                   <td className="px-3 py-1.5">{r.pick ? <span className="text-xs" style={{ color: "var(--text-muted)" }}>Pick</span> : <PosBadge pos={r.position} rank={r.posRank} />}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>{r.age ?? "–"}</td>
@@ -8754,15 +8942,17 @@ function NbaMarketTable({ rows, sortBy, setSortBy, showTiers }) {
                       <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{fmtValue(r.value)}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden sm:table-cell" style={{ color: changeColor(r.d7) }}>{fmtChange(r.d7)}</td>
+                  {weekly && <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden sm:table-cell" style={{ color: changeColor(r.d7) }}>{fmtChange(r.d7)}</td>}
                   <td className="px-3 py-1.5 text-right tabular-nums text-xs" style={{ color: changeColor(r.d30) }}>{fmtChange(r.d30)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: "var(--text-secondary)" }}
-                    title={r.thin ? "Few trades so far: this value leans on the model" : "Recency-weighted trades behind this value"}>
-                    {r.trades >= 10 ? Math.round(r.trades) : r.trades.toFixed(1)}
+                    title={`${r.thin ? "Few trades so far: this value leans on the model" : "Recency-weighted trades behind this value"}. Click for the last ${TRADE_DB_DAYS} days' trades.`}>
+                    <a href={tradeDbHash(sport, [r.ledgerKey])} className="hover:underline">{r.trades >= 10 ? Math.round(r.trades) : r.trades.toFixed(1)}</a>
                     {r.thin && <span className="ml-1" style={{ color: "var(--text-muted)" }}>thin</span>}
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: "var(--text-muted)" }}>{fmtValue(r.model)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: changeColor(r.gap) }}>{fmtChange(r.gap)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: changeColor(r.gap) }}>{r.model == null ? "–" : fmtChange(r.gap)}</td>
+                  {consensus && <td className="px-3 py-1.5 text-right tabular-nums text-xs hidden md:table-cell" style={{ color: changeColor(r.fcGap ?? 0) }}
+                    title={r.fcRank ? `FantasyCalc ranks him #${r.fcRank} among players` : "Not ranked by FantasyCalc"}>{r.fcGap == null ? "–" : fmtChange(r.fcGap)}</td>}
                 </tr>
               </React.Fragment>
             ))}
@@ -8888,9 +9078,10 @@ function NbaMarket({ data }) {
             </p>
           )}
 
-          {pos === "ALL" && !query && <NbaMarketMovers rows={rows} />}
-          <NbaMarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={sortBy === "value" && !query} />
+          {pos === "ALL" && !query && <MarketMovers rows={rows} />}
+          <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={sortBy === "value" && !query} />
           <NbaMarketTrades trades={recent} format={format} rows={rows} season={market.season} />
+          <a href={TRADE_DB_HASH.nba} className="text-xs underline w-fit" style={{ color: "var(--text-muted)" }}>Search every {format} trade from the last {TRADE_DB_DAYS} days in the Trade Ledger</a>
         </>
       )}
     </div>
@@ -10522,6 +10713,8 @@ const PAGES = [
     blurb: "See who wins a trade, with market-style adjustments for 2-for-1s, starting from this month's biggest risers and fallers." },
   { key: "trade-db", sport: "nfl", label: "Trade Database", short: "Trade Ledger", hash: "#/trades", group: "Dynasty",
     blurb: "The last 30 days of real Sleeper trades with today's values: search any players and picks to see what they went for." },
+  { key: "market", sport: "nfl", label: "Trade Market", short: "Trading Floor", hash: "#/market", group: "Dynasty",
+    blurb: "What managers actually pay in real Sleeper trades: values, risers and fallers, and where the market and FantasyCalc disagree." },
   { key: "class2027", sport: "nfl", label: "2027 Rookie Class", short: "Scouting Dept.", hash: "#/2027", group: "Dynasty",
     blurb: "The top prospects for next year's rookie drafts, and what a 2027 pick is worth right now." },
   { key: "prospect", sport: "nfl", label: "Prospect Profile", short: "Prospect File", hash: "#/prospect/", hidden: true },
@@ -10580,6 +10773,7 @@ const PAGE_STYLE = {
   player: { hue: "var(--hue-blue)", icon: PAGE_ICONS.profile },
   trade: { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
   "trade-db": { hue: "var(--hue-violet)", icon: PAGE_ICONS.ledger },
+  market: { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
   class2027: { hue: "var(--hue-magenta)", icon: PAGE_ICONS.scouting },
   prospect: { hue: "var(--hue-magenta)", icon: PAGE_ICONS.scouting },
   "nba-weekly": { hue: "var(--hue-blue)", icon: PAGE_ICONS.scores },
@@ -11388,6 +11582,7 @@ function App() {
         {page === "player" && <NflProfile dynasty={dynasty} settings={settings} />}
         {page === "trade" && <TradeCalculator data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "trade-db" && <TradeDatabase data={dynasty} settings={settings} setSettings={setSettings} />}
+        {page === "market" && <NflMarket data={dynasty} settings={settings} setSettings={setSettings} />}
         {page === "class2027" && (
           <DynastyClass2027 data={settings.mode === "dynasty" ? dynasty : classValues} settings={settings} setSettings={setSettings} />
         )}

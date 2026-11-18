@@ -85,12 +85,13 @@ The page is laid out like a website, themed as an **executive front office**
   | War Room | Player Values (draft board and value list) |
   | Trade Desk | Trade Calculator |
   | Trade Ledger | Trade Database |
+  | Trading Floor | Trade Market |
   | Scouting Dept. | 2027 Rookie Class |
   | Player File | Player Profile (no nav entry; reached from player names) |
 
   Basketball reuses the football names for its matching rooms (Scoreboard,
-  Waiver Desk, Training Room, Boardroom, War Room, Trade Desk, Trade Ledger),
-  plus the Big Board (Player Rankings) and the Trading Floor (Trade Market).
+  Waiver Desk, Training Room, Boardroom, War Room, Trade Desk, Trade Ledger,
+  Trading Floor), plus the Big Board (Player Rankings).
 
   The nav, home folder tabs, page labels and browser tab titles use the room
   name. The page heading still says what the tool is.
@@ -585,6 +586,23 @@ trades are deals both managers took, so a formula in line with them calls
 most of them close, and the side getting fewer pieces shouldn't come out
 ahead or behind on average. The tests keep it that way.
 
+### Trade Market (Trading Floor)
+
+`#/market` (`NflMarket`) puts the football Trade Market, the values the site
+uses by default, on its own page like basketball's, in your format (mode, QB
+and TE premium from the shared league settings):
+
+- **Table** (`MarketTable`, shared with basketball): value, 30-day change,
+  trades behind the value (*thin* under 5; the count links to that asset's
+  trades on the Trade Ledger), the fit's model value and the gap to it, and
+  **vs FC**: FantasyCalc's rank among players minus the market's, so + means
+  managers pay more than FantasyCalc says (`nflMarketRows`). Only what the
+  market lists is shown; TE premium lifts values but not the model.
+- **Risers and fallers** (`MarketMovers`) and **Market vs FantasyCalc**
+  (`MarketVsConsensus`): the biggest 30-day moves and rank gaps among
+  players worth 1,500+.
+- **Latest trades**: the newest Trade Ledger trades, with a link to the rest.
+
 ### Trade Calculator
 
 Add players or picks to what each team gets. Each side shows its plain value,
@@ -1033,7 +1051,10 @@ real trades, like KeepTradeCut's tradesourced values:
   without reading any leagues). The page shows rankings
   with tiers, filters and sorts, risers and fallers, the trade count (*thin*
   under 5), market vs model, and recent trades at today's values judged with
-  `evaluateTrade`. Player profiles get a market box (`NbaMarketProfile`).
+  `evaluateTrade`. Player profiles get a market box (`NbaMarketProfile`)
+  with the player's recent trades under it. The table (`MarketTable`) and
+  movers are shared with the football Trading Floor, and each trade count
+  links to that asset's trades on the Trade Ledger.
 
 ### Expected back (Training Room)
 

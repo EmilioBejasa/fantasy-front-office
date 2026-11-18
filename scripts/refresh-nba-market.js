@@ -5,7 +5,6 @@
 // - data/nba-market.js: today's dynasty and redraft values (0-9999), the
 //   model value, effective trade count, tier and 7/30-day change per asset.
 // - data/nba-market-history.js: one point a week per asset, for profiles.
-// - data/nba-trades-recent.js: the latest trades, for the page's feed.
 // - data/nba-trades.js: the Trade Database, every trade the fit used (see
 //   tradeDatabase in lib/nba-market.js).
 // and keeps its working state in cache/ (committed, not deployed):
@@ -35,7 +34,6 @@ const TRADES = path.join(ROOT, "cache", "nba-trades.json");
 const SNAPSHOT = path.join(ROOT, "data", "nba-snapshot.js");
 const OUT = path.join(ROOT, "data", "nba-market.js");
 const HISTORY_OUT = path.join(ROOT, "data", "nba-market-history.js");
-const RECENT_OUT = path.join(ROOT, "data", "nba-trades-recent.js");
 const DB_OUT = path.join(ROOT, "data", "nba-trades.js");
 
 const SEED_USER = "asterisk387";
@@ -47,7 +45,6 @@ const BUDGET = Number(args[args.indexOf("--budget") + 1]) || (BACKFILL ? 16000 :
 const DISCOVER_SHARE = 0.35;    // of the budget, for finding new leagues
 const KEEP_DAYS = 365;
 const MIN_TRADES = 300;         // below this a format's values are the model's
-const RECENT = 150;
 const HISTORY_WEEKS = 53;
 const SEASON_WEEKS = 25;
 const DAY = 86400000;
@@ -143,17 +140,14 @@ async function main() {
   }
   stats.leaguesKnown = Object.keys(crawl.leagues).length;
 
-  // The feed: the latest usable trades with each side's players' names (some
-  // may have since retired, so the page can't look them all up).
+  // Players' names for the Trade Database (some may have since retired, so
+  // the page can't look them all up).
   const names = {};
   for (const [id, p] of Object.entries(M.playerInputs(snapshot).players)) names[id] = p.name;
-  const recent = [...fits.dynasty.usable, ...fits.redraft.usable].sort((a, b) => b.ts - a.ts).slice(0, RECENT)
-    .map((t) => ({ ts: t.ts, format: t.format, size: t.size, sides: t.sides.map((s) => s.map((id) => (M.isPick(id) ? [id] : [id, names[id] || "Unknown"]))) }));
 
   const opts = { dryRun: DRY_RUN, by: "scripts/refresh-nba-market.js" };
   C.writeIfChanged(OUT, "NBA_MARKET", { updatedOn: today, season, stats, formats, trends }, { ...opts, compareOn: (d) => ({ formats: d.formats, stats: d.stats }) });
   C.writeIfChanged(HISTORY_OUT, "NBA_MARKET_HISTORY", history, opts);
-  C.writeIfChanged(RECENT_OUT, "NBA_TRADES_RECENT", recent, opts);
   const db = M.tradeDatabase({ dynasty: fits.dynasty.usable, redraft: fits.redraft.usable }, names, now);
   C.writeIfChanged(DB_OUT, "NBA_TRADES", db, { ...opts, compareOn: (d) => d.trades });
   if (!DRY_RUN) {

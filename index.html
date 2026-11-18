@@ -6428,7 +6428,7 @@ function MarketComparison({ sides, byId, rows, settings, result, source }) {
 // trade counts and the latest trades link into the Trade Ledger.
 const NFL_MARKET_DISAGREE_MIN = 1500; // the vs FantasyCalc lists start at this value
 const NFL_MARKET_POSITIONS = ["ALL", "QB", "RB", "WR", "TE"].map((p) => ({ key: p, label: p }));
-const NFL_MARKET_FEED = 6;
+const MARKET_FEED = 6; // Trading Floor trades before "All … in the Trade Ledger"
 
 // The Trade Ledger's key for a FantasyCalc pick row ("2027 1st (Early)" → "p2027-1-early").
 function pickLedgerKey(name) {
@@ -6497,6 +6497,28 @@ function MarketVsConsensus({ rows }) {
         { title: "Managers pay more", list: higher, color: "var(--trend-up)", fmt, empty: "No big gaps." },
         { title: "Managers pay less", list: lower, color: "var(--series-red)", fmt, empty: "No big gaps." },
       ]} />
+    </section>
+  );
+}
+
+// A Trading Floor's latest trades: the newest Trade Ledger cards, with a
+// link to the rest. db, list: useRecentTrades'.
+function LatestTrades({ sport, db, list, format }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          Latest trades <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>· real Sleeper trades at today's values</span>
+        </h3>
+        {list.length > 0 && <a href={TRADE_DB_HASH[sport]} className="text-xs underline" style={{ color: "var(--text-muted)" }}>All {list.length.toLocaleString()} from the last {TRADE_DB_DAYS} days in the Trade Ledger</a>}
+      </div>
+      {db === undefined ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading trades…</p>
+        : db === null ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>The trade database isn't available right now.</p>
+        : !list.length ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>No trades in the last {TRADE_DB_DAYS} days yet.</p> : (
+        <div className="grid gap-2 md:grid-cols-2">
+          {list.slice(0, MARKET_FEED).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport={sport} format={format} />)}
+        </div>
+      )}
     </section>
   );
 }
@@ -6570,19 +6592,7 @@ function NflMarket({ data, settings, setSettings }) {
           )}
           <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={false} sport="nfl" weekly={false} consensus />
 
-          <section className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between gap-2 flex-wrap">
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                Latest trades <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>· at today's values</span>
-              </h3>
-              {list.length > 0 && <a href={TRADE_DB_HASH.nfl} className="text-xs underline" style={{ color: "var(--text-muted)" }}>All {list.length.toLocaleString()} from the last {TRADE_DB_DAYS} days in the Trade Ledger</a>}
-            </div>
-            {db === undefined ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading trades…</p> : (
-              <div className="grid gap-2 md:grid-cols-2">
-                {list.slice(0, NFL_MARKET_FEED).map((t, i) => <TradeDbCard key={`${t.ts}-${i}`} t={t} sport="nfl" format={format} />)}
-              </div>
-            )}
-          </section>
+          <LatestTrades sport="nfl" db={db} list={list} format={format} />
         </>
       )}
     </div>
@@ -8763,13 +8773,13 @@ function NbaTrade({ data, settings, setSettings }) {
 //   { id: [7-day change, 30-day change] } } }, ids are Sleeper player ids or
 //   "pick-<drafts away>-<round>";
 // - data/nba-market-history.js: weekly values, for profiles;
-// - data/nba-trades-recent.js: the latest trades, for the feed.
+// - data/nba-trades.js: every trade the fit used, for the Trade Ledger,
+//   profiles, the Trade Desk and the Trading Floor's latest trades.
 const NBA_MARKET_FORMATS = [{ key: "dynasty", label: "Dynasty" }, { key: "redraft", label: "Redraft" }];
 const NBA_MARKET_FORMAT_KEY = "ff-valuediff:nba-market-format";
 const NBA_MARKET_THIN = 5;          // effective trades below this: the value leans on the model
 const NBA_MARKET_MOVERS_MIN = 1500; // risers and fallers start at this value
 const NBA_MARKET_PAGE = 150;        // rows before "Show more"
-const NBA_MARKET_FEED = 12;         // trades before "Show more"
 const NBA_MARKET_SORTS = {
   value: (a, b) => b.value - a.value,
   d7: (a, b) => b.d7 - a.d7 || b.value - a.value,
@@ -8782,7 +8792,6 @@ const NBA_MARKET_SORTS = {
 const loadNbaMarket = () => loadDataScript("data/nba-market.js", "NBA_MARKET");
 const loadNflMarketHistory = () => loadDataScript("data/nfl-market-history.js", "NFL_MARKET_HISTORY");
 const loadNbaMarketHistory = () => loadDataScript("data/nba-market-history.js", "NBA_MARKET_HISTORY");
-const loadNbaTradesRecent = () => loadDataScript("data/nba-trades-recent.js", "NBA_TRADES_RECENT");
 
 // A data file's global: undefined while loading, null if it's missing.
 function useDataFile(load, enabled = true) {
@@ -8968,68 +8977,12 @@ function MarketTable({ rows, sortBy, setSortBy, showTiers, sport = "nba", weekly
   );
 }
 
-// The latest real trades, each asset at today's market value and judged with
-// the Trade Desk's formula in that trade's league size.
-function NbaMarketTrades({ trades, format, rows, season }) {
-  const [limit, setLimit] = useState(NBA_MARKET_FEED);
-  const byId = useMemo(() => Object.fromEntries(rows.map((r) => [r.id, r])), [rows]);
-  const list = (trades || []).filter((t) => t.format === format);
-  if (!list.length) return null;
-  const playerValues = rows.filter((r) => !r.pick).map((r) => r.value);
-  const asset = ([id, name]) => {
-    const r = byId[id];
-    return { id, name: r?.name || (id.startsWith("pick-") ? nbaPickLabel(id, season) : name), position: r?.position, value: r?.value || 0, gone: !r };
-  };
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        Recent trades <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>· real {format} trades from Sleeper leagues, at today's values</span>
-      </h3>
-      <div className="grid gap-2 md:grid-cols-2">
-        {list.slice(0, limit).map((t, ti) => {
-          const sides = t.sides.map((s) => s.map(asset));
-          const result = evaluateTrade(sides.map((s) => s.map((a) => a.value)), {
-            topValue: 9999, playerValues, teams: t.size || 12, raw: false, rosterSpots: NBA_ROSTER_SPOTS, formula: NBA_TRADE_FORMULA[format], fairMin: TRADE_FAIR_MIN,
-          });
-          const verdict = result.verdict === "fair" ? "Even by today's values" : `Side ${TRADE_SIDES[result.winner]} ahead by ${Math.round(result.pct * 100)}% today`;
-          return (
-            <div key={ti} className="rounded-lg border p-3 flex flex-col gap-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-              <div className="flex justify-between text-xs" style={{ color: "var(--text-muted)" }}>
-                <span>{new Date(t.ts).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {t.size || 12}-team {t.format}</span>
-                <span style={{ color: result.verdict === "fair" ? "var(--text-muted)" : "var(--text-secondary)" }}>{verdict}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {sides.map((s, si) => (
-                  <ul key={si} className="flex flex-col gap-0.5 min-w-0">
-                    <li className="text-xs font-semibold" style={{ color: SIDE_COLOR[TRADE_SIDES[si]] }}>Side {TRADE_SIDES[si]} gets</li>
-                    {s.map((a) => (
-                      <li key={a.id} className="flex justify-between gap-2 min-w-0">
-                        <span className="truncate">{a.gone ? <span style={{ color: "var(--text-muted)" }}>{a.name}</span> : <PlayerLink sport="nba" id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}</span>
-                        <span className="tabular-nums text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>{a.gone ? "–" : fmtValue(a.value)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {list.length > limit && (
-        <button type="button" onClick={() => setLimit(limit + NBA_MARKET_FEED)} className="btn-secondary rounded-md px-3 py-1.5 text-sm font-medium w-fit">Show more trades</button>
-      )}
-    </section>
-  );
-}
-
 function NbaMarket({ data }) {
-  const market = useDataFile(loadNbaMarket);
-  const recent = useDataFile(loadNbaTradesRecent);
   const [format, setFormat] = useNbaMarketFormat();
+  const { market, rows, db, list } = useNbaRecentTrades(true, format, data.players);
   const [pos, setPos] = useState("ALL");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("value");
-  const rows = useMemo(() => nbaMarketRows(market, format, data.players), [market, format, data.players]);
   const view = useMemo(() => nbaMarketView(rows, { pos, query, sortBy }), [rows, pos, query, sortBy]);
   const stats = market?.stats?.[format];
   const posOptions = format === "dynasty" ? [...NBA_POSITION_OPTIONS, { key: "PICK", label: "Picks" }] : NBA_POSITION_OPTIONS;
@@ -9080,8 +9033,7 @@ function NbaMarket({ data }) {
 
           {pos === "ALL" && !query && <MarketMovers rows={rows} />}
           <MarketTable key={format} rows={view} sortBy={sortBy} setSortBy={setSortBy} showTiers={sortBy === "value" && !query} />
-          <NbaMarketTrades trades={recent} format={format} rows={rows} season={market.season} />
-          <a href={TRADE_DB_HASH.nba} className="text-xs underline w-fit" style={{ color: "var(--text-muted)" }}>Search every {format} trade from the last {TRADE_DB_DAYS} days in the Trade Ledger</a>
+          <LatestTrades sport="nba" db={db} list={list} format={format} />
         </>
       )}
     </div>

@@ -1045,13 +1045,12 @@ real trades, like KeepTradeCut's tradesourced values:
 - **Output.** `data/nba-market.js` (values 0-9,999 with the top asset at 9,999,
   model value, effective trade count, tier, 7- and 30-day change),
   `data/nba-market-history.js` (weekly, for profiles) and
-  `data/nba-trades-recent.js` (the latest 150 trades), plus
   `data/nba-trades.js`, every trade the fit used, for the Trade Ledger
   (`tradeDatabase`; `--no-crawl` refits from the trades already collected
   without reading any leagues). The page shows rankings
   with tiers, filters and sorts, risers and fallers, the trade count (*thin*
-  under 5), market vs model, and recent trades at today's values judged with
-  `evaluateTrade`. Player profiles get a market box (`NbaMarketProfile`)
+  under 5), market vs model, and the latest Trade Ledger trades at today's
+  values (`LatestTrades`, shared with football). Player profiles get a market box (`NbaMarketProfile`)
   with the player's recent trades under it. The table (`MarketTable`) and
   movers are shared with the football Trading Floor, and each trade count
   links to that asset's trades on the Trade Ledger.

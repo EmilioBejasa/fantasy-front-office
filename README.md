@@ -764,7 +764,10 @@ and everything else uses team, matchup, standings, league pulse, building blocks
   guide. They're grouped by position (QB, RB, WR, TE) with up to three per position, weakest room first. Each deal is a player on another
   team, alone or with a second player from that team, plus an offer from this roster that the Trade Desk's formula
   (`evaluateTrade`, same league size) calls fair or a slight overpay. Offers are the roster's 14 most valuable assets,
-  one or two at a time; 2-for-2s are left to the Trade Desk. What counts as a better deal depends on the team:
+  one or two at a time; 2-for-2s are left to the Trade Desk. Under each target, a line says what managers paid for him
+  lately (`tradePrice`, through `TradePriceContext`): the median plain total of the other side, at today's values, over
+  the last 30 days' trades in the league's format where he went alone, linking to them on the Trade Ledger. What counts
+  as a better deal depends on the team:
   - In redraft, and for a dynasty team in the mix, it's the biggest gain in best-lineup value. The gain must be at
     least 250, or 10% of the target's value if that's more.
   - For a dynasty contender, it's the same, scored on this season's (redraft) values.
@@ -988,7 +991,9 @@ isn't documented anywhere I could find, so there's no Sleeper preset.
   - **around the league**: every other matchup's score, projection and favorite;
   - **standings**: record and points for, from Sleeper;
   - **power rankings**: each team's best lineup (as many players as the league
-    starts) by rest-of-season value. Open a team for its whole roster.
+    starts) by rest-of-season value, or by the Trading Floor's dynasty or
+    redraft values (a switch, remembered in `ff-valuediff:nba-power-values`;
+    players only, picks aren't counted). Open a team for its whole roster.
   The week is the league's (`settings.leg`) and games left come from the
   NBA schedule for the current fantasy week. Opened by league ID with no
   Sleeper user, a **Your team** menu picks your team. It re-checks with the

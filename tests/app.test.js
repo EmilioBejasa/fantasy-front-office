@@ -848,6 +848,17 @@ test("tradeDeskTab: movers on an empty desk, then the remembered tab or real tra
   assert.equal(app.tradeDeskTab("bogus", true), "trades");
 });
 
+test("tradePrice: the other side's total when the asset went alone", () => {
+  const { rows, db, now } = tradeDbFixture();
+  const list = app.tradeDbRows(db, rows, "dynasty-sf", now, { judge: false });
+  // d went alone for the 2027 1st (5,000); for a since-drafted pick (left out); and for "gone" (no value, left out).
+  assert.deepEqual(plain(app.tradePrice(list, "d")), { n: 1, median: 5000, low: 5000, high: 5000 });
+  // a went alone for b + c (9,000).
+  assert.equal(app.tradePrice(list, "a").median, 9000);
+  assert.equal(app.tradePrice(list, "b").n, 0); // never alone on his side
+  assert.equal(app.tradePrice([], "a").median, null);
+});
+
 test("evaluateTrade: the stud premium is league-wide only; basketball dynasty credits 3/4 of a roster spot", () => {
   // A 2-for-1 of mid players: no one in it is near the league's best.
   const nfl = app.evaluateTrade([[3000], [1500, 1500]], ctx());

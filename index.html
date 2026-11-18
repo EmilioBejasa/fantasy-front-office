@@ -4981,10 +4981,23 @@ function WeekMatchup({ mu, teams, myTeam, team, onView }) {
   );
 }
 
+// What a trade target went for lately (tradePrice), linking to those trades on the Trade Ledger.
+function TradePriceLine({ price, id }) {
+  if (!price?.n) return null;
+  const range = price.n > 1 && price.high > price.low ? ` (${fmtValue(price.low)}–${fmtValue(price.high)})` : "";
+  return (
+    <a href={tradeDbHash("nfl", [id])} className="block text-xs hover:underline" style={{ color: "var(--text-muted)" }}
+      title="What managers gave for him alone in real Sleeper trades this month, at today's values">
+      Went for ~{fmtValue(price.median)}{range} in {price.n} trade{price.n === 1 ? "" : "s"} this month
+    </a>
+  );
+}
+
 // One suggested trade (from suggestTrades), with why it works for both sides.
 // `forName` is who it's for: "you", or the team's name.
 function TradeIdeaCard({ s, targets, forName, sleeperPlayers, onView, onOpen }) {
   const getSum = sumOf(s.get.map((a) => a.value));
+  const priceOf = React.useContext(TradePriceContext);
   return (
     <li className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
       <div className="flex items-start justify-between gap-2">
@@ -4995,6 +5008,7 @@ function TradeIdeaCard({ s, targets, forName, sleeperPlayers, onView, onOpen }) 
               <PlayerLink id={g.id} pos={g.position}>{g.name}</PlayerLink>{" "}
               {g.position === "PICK" ? <PosBadge pos="PICK" /> : <PosBadge pos={g.position} rank={g.posRank} />}
               {g.age && <span className="text-xs" style={{ color: "var(--text-muted)" }}> {g.age}</span>}
+              <TradePriceLine price={g.position !== "PICK" && priceOf ? priceOf(g.id) : null} id={g.id} />
             </span>
           ))}
           <button type="button" onClick={() => onView(s.partner.rosterId)} className="text-xs underline"
@@ -5332,7 +5346,7 @@ function TeamBanner({ team, isYou, lean, facts, series, trend, avatar, isDynasty
           </span>
         )}
         <Sparkline points={series} color={accent} />
-        {series.length > 1 && <span className="text-xs" style={{ color: "var(--text-muted)" }}>KTC value, last {series.length - 1} weeks</span>}
+        {series.length > 1 && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Trade Market value, last {series.length - 1} weeks</span>}
       </div>
     </section>
   );
@@ -5895,12 +5909,21 @@ function MyLeagues({ settings, setSettings, navigate, scores }) {
 
   const posAvg = Object.fromEntries(ROOM_POSITIONS.map((p) => [p, n ? teams.reduce((s, t) => s + t.byPos[p], 0) / n : 0]));
 
+  // What managers paid lately for each trade target, in this league's format.
+  const [, recentTrades] = useRecentTrades(loadNflTrades, !!raw, values.rows, `${leagueSettings.mode}-${leagueSettings.qb}`);
+  const priceOf = useMemo(() => {
+    if (!recentTrades.length) return null;
+    const cache = {};
+    return (id) => (cache[id] ||= tradePrice(recentTrades, id));
+  }, [recentTrades]);
+
   const leagueLink = (id) => `${LEAGUES_HASH}/${id}`;
   const my = React.useContext(MyLeagueContext);
   const isMyLeague = (id) => my.nfl?.leagueId === String(id);
   const follow = (fn) => (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; e.preventDefault(); fn(); };
 
   return (
+    <TradePriceContext.Provider value={priceOf}>
     <div className="flex flex-col gap-5">
       {!leagueId ? (
         <>
@@ -6294,6 +6317,7 @@ function MyLeagues({ settings, setSettings, navigate, scores }) {
         </>
       )}
     </div>
+    </TradePriceContext.Provider>
   );
 }
 
@@ -6851,6 +6875,25 @@ function tradeDbComparables(list, deskSides, limit = 6) {
   const keys = [...new Map([...deskSides[0], ...deskSides[1]].map((id) => keyOf[id]).filter(Boolean).map((k) => [k.key, k])).values()];
   return { trades: scored.slice(0, limit), total: scored.length, keys };
 }
+
+// What managers paid for an asset lately: over the trades where it went
+// alone (its side had nothing else), the plain total of the other side at
+// today's values, as { n, median, low, high } (n 0 with none). Trades with
+// an asset that has no value today on the other side are left out.
+function tradePrice(list, key) {
+  const totals = [];
+  for (const t of list) {
+    const side = t.sides.findIndex((s) => s.length === 1 && tradeDbMatches(s[0], key));
+    if (side < 0) continue;
+    const other = t.sides[1 - side];
+    if (other.some((a) => a.why)) continue;
+    totals.push(other.reduce((sum, a) => sum + (a.value || 0), 0));
+  }
+  if (!totals.length) return { n: 0, median: null, low: null, high: null };
+  return { n: totals.length, median: Math.round(medianOf(totals)), low: Math.min(...totals), high: Math.max(...totals) };
+}
+// A league page's prices for its trade ideas: (player id) → tradePrice, or null while loading.
+const TradePriceContext = React.createContext(null);
 
 // The last TRADE_DB_DAYS of one format's trades at `rows`' values, loading
 // the database file only once `enabled`: [db (undefined while loading, null
@@ -9362,6 +9405,11 @@ function NbaLeagueWaivers({ league, raw, rows, games, myRosterId }) {
   );
 }
 
+// Power rankings can rank teams by the Trade Market instead of
+// rest-of-season points (players only; owned picks aren't counted).
+// Remembered per browser. Matchups, standings and waivers stay on points.
+const NBA_POWER_VALUES_KEY = "ff-valuediff:nba-power-values";
+
 function NbaLeagues({ data }) {
   const my = React.useContext(MyLeagueContext);
   const [hashId, setHashId] = useState(nbaLeagueIdFromHash);
@@ -9413,7 +9461,18 @@ function NbaLeagues({ data }) {
   const myPair = pairs.find(([a, b]) => a.rosterId === myRosterId || b.rosterId === myRosterId);
   const [mine, theirs] = myPair ? (myPair[0].rosterId === myRosterId ? myPair : [myPair[1], myPair[0]]) : [];
   const standings = [...teams].sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pf - a.pf);
-  const power = [...teams].sort((a, b) => b.value - a.value);
+  const [powerValues, setPowerValuesState] = useState(() => {
+    try { const v = localStorage.getItem(NBA_POWER_VALUES_KEY); return NBA_SETTING_OPTIONS.values.some((o) => o.key === v) ? v : "season"; } catch (e) { return "season"; }
+  });
+  const setPowerValues = (v) => { setPowerValuesState(v); try { localStorage.setItem(NBA_POWER_VALUES_KEY, v); } catch (e) {} };
+  const powerMarket = useDataFile(loadNbaMarket, powerValues !== "season");
+  const powerTeams = useMemo(() => {
+    if (powerValues === "season" || !powerMarket || !league) return teams;
+    const marketRows = nbaMarketRows(powerMarket, powerValues, data.players).filter((r) => !r.pick)
+      .map((r) => ({ ...r, fpg: byId[r.id]?.fpg ?? 0 }));
+    return nbaLeagueTeams({ league, rosters: raw.rosters, users: raw.users, rows: marketRows, players: data.players }).teams;
+  }, [powerValues, powerMarket, league, raw, teams, byId, data.players]);
+  const power = [...powerTeams].sort((a, b) => b.value - a.value);
   const topValue = power[0]?.value || 1;
   const scoringLabel = league ? (typeof nbaLeagueScoring(league) === "object" ? "league scoring" : "standard scoring") : "";
 
@@ -9534,7 +9593,10 @@ function NbaLeagues({ data }) {
               </table>
             </ProfileSection>
 
-            <ProfileSection title="Power rankings" aside="best lineup, rest of season">
+            <ProfileSection title="Power rankings"
+              aside={powerValues === "season" ? "best lineup, rest of season" : `best lineup at ${powerValues} market values`}>
+              <PillGroup options={NBA_SETTING_OPTIONS.values} value={powerValues} onChange={setPowerValues} />
+              {powerValues !== "season" && powerMarket === undefined && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading the market…</p>}
               <ol className="flex flex-col">
                 {power.map((t, i) => (
                   <li key={t.rosterId} className="border-t first:border-t-0" style={{ borderColor: "var(--border)" }}>

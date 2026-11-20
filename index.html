@@ -7276,11 +7276,12 @@ function TradeCalculator({ data, settings, setSettings }) {
     setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids)));
   };
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
-  // A league picked here sets the desk to its format, QB, size and scoring.
+  // With a league, the desk follows it: dynasty or redraft (keepers count as
+  // dynasty), QB, size and scoring, each time it loads.
   const league = useTradeLeague("nfl");
   const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
   useEffect(() => {
-    if (league.raw?.picked) setSettings((s) => ({ ...s, ...settingsFromLeague(league.raw.league) }));
+    if (league.raw) setSettings((s) => ({ ...s, ...settingsFromLeague(league.raw.league) }));
   }, [league.raw]);
 
   return (
@@ -7301,7 +7302,7 @@ function TradeCalculator({ data, settings, setSettings }) {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
           <LeagueSettings settings={settings} setSettings={setSettings} />
-          <TradeLeaguePicker league={league} />
+          <TradeLeaguePicker league={league} sport="nfl" />
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
@@ -9094,8 +9095,14 @@ function tradeLeagueTeams(sport, raw, rows, byId) {
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function TradeLeaguePicker({ league }) {
+// Keeper leagues value the future, so they count as dynasty (as in settingsFromLeague).
+const leagueIsDynasty = (league) => [1, 2].includes(league?.settings?.type);
+
+function TradeLeaguePicker({ league, sport }) {
   if (!league.options.length) return null;
+  const l = league.status === "ready" && league.raw?.league;
+  const detected = l && (sport === "nfl" ? leagueTags(l)
+    : [LEAGUE_TYPE_LABEL[l.settings?.type] || "Redraft", `${l.total_rosters} teams`].join(" · "));
   return (
     <LabeledControl label="League">
       <span className="flex items-center gap-2">
@@ -9106,6 +9113,12 @@ function TradeLeaguePicker({ league }) {
         </select>
         {league.status === "loading" && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Loading…</span>}
         {league.status === "error" && <span className="text-xs" style={{ color: "var(--series-red)" }}>Couldn't load it</span>}
+        {detected && (
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}
+            title="The desk is set to this league's format; you can still change the settings by hand">
+            {detected}
+          </span>
+        )}
       </span>
     </LabeledControl>
   );
@@ -9191,11 +9204,19 @@ function NbaTrade({ data, settings, setSettings }) {
   const result = useMemo(() => evaluateTrade(sides.map((ids) => ids.map((id) => byId[id]?.value || 0)), ctx), [sides, byId, ctx]);
 
   const add = (si, id) => { if (!inDeal.has(id)) setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids))); };
-  // A league picked here sets the league size.
+  // With a league, the desk follows it each time it loads: its size, and
+  // dynasty market values for a dynasty or keeper league. A redraft league
+  // keeps Season stats or Redraft market, whichever is picked (Dynasty
+  // market switches to Redraft market).
   const league = useTradeLeague("nba");
   const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
   useEffect(() => {
-    if (league.raw?.picked) setSettings((s) => ({ ...s, teams: nearestOption(league.raw.league.total_rosters || 12, [8, 10, 12, 14, 16]) }));
+    if (!league.raw) return;
+    const dynasty = leagueIsDynasty(league.raw.league);
+    setSettings((s) => ({
+      ...s, teams: nearestOption(league.raw.league.total_rosters || 12, [8, 10, 12, 14, 16]),
+      values: dynasty ? "dynasty" : (s.values === "dynasty" ? "redraft" : s.values || "season"),
+    }));
   }, [league.raw]);
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
 
@@ -9230,7 +9251,7 @@ function NbaTrade({ data, settings, setSettings }) {
             <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
               onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
           </LabeledControl>
-          <TradeLeaguePicker league={league} />
+          <TradeLeaguePicker league={league} sport="nba" />
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}

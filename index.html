@@ -200,7 +200,6 @@
     transition: background-color .15s, border-color .15s, transform .15s; }
   .btn-secondary:hover { background: var(--surface-2); border-color: var(--sport); transform: translateY(-1px); }
   .btn-secondary:active { transform: translateY(0) scale(.97); }
-  .hero-glow { background: radial-gradient(55% 120% at 50% 0%, color-mix(in srgb, var(--sport) 20%, transparent), transparent 70%); }
   .text-gradient { background: linear-gradient(90deg, var(--brass-grad-a), var(--brass-grad-b) 55%, var(--brass-grad-a));
     -webkit-background-clip: text; background-clip: text; color: transparent; }
 
@@ -11751,7 +11750,7 @@ function HomePage({ navigate, scores, dynasty, nba, sport, setSport }) {
   const sportInfo = SPORTS.find((x) => x.key === sport);
   return (
     <div className="flex flex-col gap-10">
-      <section className="hero-glow -mx-4 px-4 pt-8 pb-2 sm:pt-12 text-center flex flex-col items-center gap-4">
+      <section className="-mx-4 px-4 pt-8 pb-2 sm:pt-12 text-center flex flex-col items-center gap-4">
         <span className="text-xs font-semibold uppercase tracking-wider rounded-md border px-3 py-1"
           style={{ borderColor: "var(--sport)", color: "var(--sport)", background: "var(--surface-1)" }}>
           {sport === "nba"

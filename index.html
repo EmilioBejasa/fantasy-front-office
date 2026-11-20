@@ -249,6 +249,50 @@
   .headshot { position: relative; flex-shrink: 0; border-radius: 9999px; overflow: hidden; background: var(--surface-2);
     box-shadow: 0 0 0 2px var(--ring, var(--border)); }
   .headshot img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* Trade board (both sports' trade desks): a trade machine layout (team columns with a colored
+     header, player cards with headshots and NBA team colors, a scoreboard). */
+  .fs-team { border-radius: 14px; border: 1px solid var(--border); background: var(--surface-1);
+    display: flex; flex-direction: column; min-width: 0; }
+  .fs-head { color: #fff; padding: 14px 16px; border-radius: 13px 13px 0 0; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+    background: linear-gradient(135deg, var(--side), color-mix(in srgb, var(--side) 62%, #000)); }
+  .fs-head-kicker { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+  .fs-head-name { font-size: 22px; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
+  .fs-team-select { font-size: 20px; font-weight: 800; line-height: 1.2; color: #fff; background: transparent; border: 0; padding: 0;
+    max-width: 100%; cursor: pointer; text-overflow: ellipsis; border-radius: 4px; }
+  .fs-team-select:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .fs-team-select option { color: var(--text-primary); background: var(--surface-1); font-size: 14px; font-weight: 500; }
+  .fs-head-total { font-size: 26px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; text-align: right; }
+  .fs-head-sub { font-size: 11px; opacity: .8; text-align: right; margin-top: 3px; }
+  .fs-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .fs-card { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 10px;
+    background: var(--surface-2); overflow: hidden; }
+  .fs-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--team, var(--border)); }
+  .fs-card .fs-remove { opacity: .55; transition: opacity .15s; }
+  .fs-card:hover .fs-remove, .fs-card .fs-remove:focus-visible { opacity: 1; }
+  .fs-name { font-weight: 700; font-size: 15px; line-height: 1.2; }
+  .fs-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 3px; font-size: 11.5px; color: var(--text-muted); }
+  .fs-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10.5px;
+    font-weight: 700; letter-spacing: .02em; color: #fff; background: var(--chip, var(--text-muted));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+  .fs-value { font-size: 18px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text-primary); text-align: right; }
+  .fs-value-sub { font-size: 10.5px; color: var(--text-muted); text-align: right; margin-top: 3px; }
+  .fs-pick { width: 52px; height: 52px; flex-shrink: 0; border-radius: 12px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; line-height: 1.05; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--pos-pick), color-mix(in srgb, var(--pos-pick) 60%, #000)); }
+  .fs-pick small { font-size: 9.5px; font-weight: 700; opacity: .85; }
+  .fs-add { border: 1.5px dashed var(--border); border-radius: 10px; padding: 8px; display: flex; align-items: center; gap: 8px; }
+  .fs-add-plus { width: 30px; height: 30px; flex-shrink: 0; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: var(--side); background: color-mix(in srgb, var(--side) 14%, transparent); }
+  .fs-swap { width: 40px; height: 40px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); transition: color .15s, border-color .15s; }
+  .fs-swap:hover { color: var(--sport); border-color: var(--sport); }
+  .fs-score { border-radius: 14px; border: 1px solid var(--border); background: var(--surface-1); padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 10px; }
+  .fs-score-num { font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .fs-verdict { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 9999px; font-size: 13px;
+    font-weight: 800; letter-spacing: .02em; text-transform: uppercase; color: #fff; background: var(--verdict); white-space: nowrap;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .pts-chart { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 160px;
     border-bottom: 1px solid var(--border); }
   .pts-col { position: relative; flex: 1; height: 100%; min-width: 0; padding: 0; border: 0; background: transparent; cursor: default; }
@@ -2973,26 +3017,28 @@ function writeTradeHash(sides, key = "trade", emptyHash = "#/trade", values = ""
   try { window.history.replaceState(null, "", hash); } catch (e) {}
 }
 
-function AssetPicker({ rows, exclude, onPick }) {
+// `browse`: list everything in `rows` when the box is focused and empty (a
+// league team's roster on the trade board), not just search matches.
+function AssetPicker({ rows, exclude, onPick, browse = false, placeholder = "Add a player or pick" }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return rows.filter((r) => !exclude.has(r.id) && r.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [rows, query, exclude]);
+    if (!q) return browse ? rows.filter((r) => !exclude.has(r.id)).slice(0, 60) : [];
+    return rows.filter((r) => !exclude.has(r.id) && r.name.toLowerCase().includes(q)).slice(0, browse ? 60 : 8);
+  }, [rows, query, exclude, browse]);
   const pick = (r) => { onPick(r.id); setQuery(""); };
 
   return (
     <div className="relative">
-      <input type="search" value={query} placeholder="Add a player or pick" aria-label="Add a player or pick"
+      <input type="search" value={query} placeholder={placeholder} aria-label={placeholder}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
         onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) { e.preventDefault(); pick(matches[0]); } }}
         className="rounded-md border px-3 py-1.5 text-sm w-full" style={inputStyle} />
       {open && matches.length > 0 && (
-        <ul className="absolute z-30 left-0 right-0 mt-1 rounded-md border overflow-hidden shadow-lg"
-          style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+        <ul className="absolute z-30 left-0 right-0 mt-1 rounded-md border overflow-y-auto shadow-lg"
+          style={{ borderColor: "var(--border)", background: "var(--surface-1)", maxHeight: "18rem" }}>
           {matches.map((r) => (
             <li key={r.id}>
               {/* mousedown, not click, so the pick lands before the input's blur closes the list */}
@@ -3014,58 +3060,10 @@ function AssetPicker({ rows, exclude, onPick }) {
   );
 }
 
-function TradeSide({ sport = "nfl", label, color, ids, byId, exclude, rows, onAdd, onRemove, result, index }) {
-  const assets = ids.map((id) => byId[id] || {
-    id, position: "?", value: 0,
-    name: id.startsWith("FP_") ? "Rookie pick (no value in redraft)" : `Unknown player (${id})`,
-  });
-  const line = (text, value, strong) => (
-    <div className="flex justify-between text-xs tabular-nums"
-      style={{ color: strong ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: strong ? 600 : 400 }}>
-      <span>{text}</span><span>{value}</span>
-    </div>
-  );
-  return (
-    <div className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
-      <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-        <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: color }} />{label} gets
-      </h3>
-      <AssetPicker rows={rows} exclude={exclude} onPick={onAdd} />
-      {assets.length === 0 ? (
-        <p className="text-sm py-3 text-center" style={{ color: "var(--text-muted)" }}>Nothing added yet.</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {assets.map((a, i) => (
-            <li key={`${a.id}-${i}`} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-sm"
-              style={{ borderColor: "var(--border)" }}>
-              <span className="min-w-0 truncate">
-                <PlayerLink sport={sport} id={a.id} pos={a.position}>{a.name}</PlayerLink>{" "}
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {a.position === "PICK" ? "Pick" : `${a.position}${a.posRank ?? ""} · ${a.team || "FA"}${a.age ? ` · ${a.age}` : ""}`}
-                </span>
-              </span>
-              <span className="flex items-center gap-2 shrink-0">
-                <span className="tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmtValue(a.value)}</span>
-                <button type="button" onClick={() => onRemove(i)} aria-label={`Remove ${a.name}`}
-                  className="icon-btn-danger text-xs px-1.5 py-0.5 rounded">✕</button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {assets.length > 0 && (
-        <div className="flex flex-col gap-0.5 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
-          {line("Player value", fmtValue(result.sums[index]))}
-          {result.stud[index] > 0 && line("Stud adjustment", `+${fmtValue(Math.round(result.stud[index]))}`)}
-          {result.credit[index] > 0 && line("Roster spot credit", `+${fmtValue(Math.round(result.credit[index]))}`)}
-          {line("Adjusted total", fmtValue(Math.round(result.adjusted[index])), true)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result }) {
+// `board`: the scoreboard above already shows the verdict and totals, so leave
+// out the headline and bar (the trade board).
+// `offers`: what each side can get (a league team's roster), for the suggestions.
+function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = false, names = TRADE_SIDES.map((s) => `Team ${s}`), offers = null }) {
   // Three assets (not already in the deal) that come closest to evening it
   // out if added to the side getting less, re-running the full formula.
   const suggestions = useMemo(() => {
@@ -3073,7 +3071,7 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result }) {
     const loser = 1 - result.winner;
     const inDeal = new Set([...sides[0], ...sides[1]]);
     const values = sides.map((ids) => ids.map((id) => byId[id]?.value || 0));
-    return rows
+    return (offers?.[loser] || rows)
       .filter((r) => !inDeal.has(r.id))
       .map((r) => {
         const next = values.map((v, i) => (i === loser ? [...v, r.value] : v));
@@ -3082,16 +3080,17 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result }) {
       .sort((x, y) => x.miss - y.miss)
       .slice(0, 3)
       .map((x) => x.r);
-  }, [sides, byId, rows, ctx, result]);
+  }, [sides, byId, rows, ctx, result, offers]);
 
   if (!sides[0].length && !sides[1].length) return null;
   const { adjusted, gap, pct, winner, verdict } = result;
-  const winnerName = `Team ${TRADE_SIDES[winner]}`;
+  const winnerName = names[winner];
   const headline = { incomplete: "Add something to both sides", fair: "Fair trade", slight: `Slightly favors ${winnerName}`, favors: `Favors ${winnerName}` }[verdict];
   const waiver = replacementPlayer(ctx.playerValues, ctx.teams, 1, ctx.rosterSpots);
 
   return (
     <div className="rounded-lg border p-4 flex flex-col gap-3" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      {!board && <>
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
           {headline}
@@ -3114,9 +3113,10 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result }) {
             }} />
         ))}
       </div>
+      </>}
       {suggestions.length > 0 && (
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          To even it out, Team {TRADE_SIDES[1 - winner]} could also get{" "}
+          To even it out, {names[1 - winner]} could also get{" "}
           {suggestions.map((r, i) => (
             <span key={r.id}>
               {i > 0 && (i === suggestions.length - 1 ? " or " : ", ")}
@@ -7276,6 +7276,12 @@ function TradeCalculator({ data, settings, setSettings }) {
     setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids)));
   };
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
+  // A league picked here sets the desk to its format, QB, size and scoring.
+  const league = useTradeLeague("nfl");
+  const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
+  useEffect(() => {
+    if (league.raw?.picked) setSettings((s) => ({ ...s, ...settingsFromLeague(league.raw.league) }));
+  }, [league.raw]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -7293,7 +7299,10 @@ function TradeCalculator({ data, settings, setSettings }) {
       </header>
 
       <div className="flex items-end justify-between flex-wrap gap-3">
-        <LeagueSettings settings={settings} setSettings={setSettings} />
+        <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
+          <LeagueSettings settings={settings} setSettings={setSettings} />
+          <TradeLeaguePicker league={league} />
+        </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
             className="pill text-xs rounded-full px-3 py-1 font-medium" aria-pressed={settings.raw}
@@ -7306,14 +7315,9 @@ function TradeCalculator({ data, settings, setSettings }) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {TRADE_SIDES.map((s, si) => (
-          <TradeSide key={s} label={`Team ${s}`} color={SIDE_COLOR[s]} ids={sides[si]} byId={byId} rows={data.rows}
-            exclude={inDeal} onAdd={(id) => add(si, id)} onRemove={(idx) => remove(si, idx)} result={result} index={si} />
-        ))}
-      </div>
-
-      <TradeVerdict sides={sides} byId={byId} rows={data.rows} ctx={ctx} result={result} />
+      <TradeBoard sides={sides} setSides={setSides} byId={byId} rows={data.rows} exclude={inDeal}
+        onAdd={add} onRemove={remove} result={result} league={league} onSides={setBoard} />
+      <TradeVerdict sides={sides} byId={byId} rows={data.rows} ctx={ctx} result={result} board names={board.names} offers={board.offers} />
 
       <div className="flex flex-col gap-3">
         <div aria-label="More on this trade"><PillGroup options={tabOptions} value={tab} onChange={pickTab} scroll /></div>
@@ -8816,6 +8820,303 @@ function nbaTradeRows(data, scoring) {
   return { rows: rows.map((r) => ({ ...r, posRank: (posCount[r.position] = (posCount[r.position] || 0) + 1) })), gamesLeft };
 }
 
+// Team colors, for the trade board's player cards (a stripe and a team chip).
+const NFL_TEAM_COLOR = {
+  ARI: "#97233f", ATL: "#a71930", BAL: "#241773", BUF: "#00338d", CAR: "#0085ca", CHI: "#0b162a", CIN: "#fb4f14",
+  CLE: "#311d00", DAL: "#003594", DEN: "#fb4f14", DET: "#0076b6", GB: "#203731", HOU: "#03202f", IND: "#002c5f",
+  JAX: "#006778", KC: "#e31837", LAC: "#0080c6", LAR: "#003594", LV: "#2b2b2b", MIA: "#008e97", MIN: "#4f2683",
+  NE: "#002244", NO: "#9f8958", NYG: "#0b2265", NYJ: "#125740", PHI: "#004c54", PIT: "#101820", SEA: "#002244",
+  SF: "#aa0000", TB: "#d50a0a", TEN: "#0c2340", WSH: "#5a1414",
+};
+const NBA_TEAM_COLOR = {
+  ATL: "#e03a3e", BOS: "#007a33", BKN: "#2b2b2b", CHA: "#1d1160", CHI: "#ce1141", CLE: "#860038", DAL: "#00538c",
+  DEN: "#0e2240", DET: "#c8102e", GSW: "#1d428a", HOU: "#ce1141", IND: "#002d62", LAC: "#c8102e", LAL: "#552583",
+  MEM: "#5d76a9", MIA: "#98002e", MIL: "#00471b", MIN: "#0c2340", NOP: "#0c2340", NYK: "#006bb6", OKC: "#007ac1",
+  ORL: "#0077c0", PHI: "#006bb6", PHX: "#1d1160", POR: "#e03a3e", SAC: "#5a2d81", SAS: "#5b6670", TOR: "#ce1141",
+  UTA: "#002b5c", WAS: "#002b5c",
+};
+
+const TEAM_COLOR = { nfl: NFL_TEAM_COLOR, nba: NBA_TEAM_COLOR };
+
+// A pick's tile text from its name: "2027 1st (Early)" → ["2027", "1st", "Early"].
+const pickTile = (name) => {
+  const m = /^(\d{4}) (\S+)(?: \(([^)]+)\))?/.exec(name || "");
+  return m ? [m[1], m[2], m[3]] : ["", "Pick"];
+};
+
+// One team's column on the trade board (both sports): a colored header with
+// what the side gets in total, then a card per player or pick (headshot, team,
+// where he's coming from, his value) and an "add" slot.
+function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, onAdd, onRemove, result,
+  name = `Team ${side}`, fromName = `Team ${TRADE_SIDES[1 - index]}`, teams = [], teamId = null, otherTeamId = null, onTeam, browse = false }) {
+  const colors = TEAM_COLOR[sport] || {};
+  const assets = ids.map((id) => byId[id] || {
+    id, position: id.startsWith("FP_") ? "PICK" : "?", value: 0,
+    name: id.startsWith("FP_") ? "Rookie pick (no value in redraft)" : `Unknown player (${id})`,
+  });
+  const has = assets.length > 0;
+  const line = (text, value, strong) => (
+    <div className="flex justify-between text-xs tabular-nums"
+      style={{ color: strong ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: strong ? 600 : 400 }}>
+      <span>{text}</span><span>{value}</span>
+    </div>
+  );
+  return (
+    <section className="fs-team" style={{ "--side": SIDE_COLOR[side] }} aria-label={`${name} receives`}>
+      <header className="fs-head">
+        <div className="min-w-0">
+          <div className="fs-head-kicker">Receives</div>
+          {teams.length > 0 ? (
+            <select className="fs-team-select" value={teamId ?? ""} aria-label={`Team ${side}: pick a team from the league`}
+              onChange={(e) => onTeam(e.target.value === "" ? null : Number(e.target.value))}>
+              <option value="">Team {side} (any team)</option>
+              {teams.map((t) => <option key={t.rosterId} value={t.rosterId} disabled={t.rosterId === otherTeamId}>{t.name}</option>)}
+            </select>
+          ) : <div className="fs-head-name">{name}</div>}
+        </div>
+        <div className="shrink-0">
+          <div className="fs-head-total">{has ? fmtValue(Math.round(result.adjusted[index])) : "–"}</div>
+          <div className="fs-head-sub">{has ? `${assets.length} ${assets.length === 1 ? "asset" : "assets"} · adjusted value` : "adjusted value"}</div>
+        </div>
+      </header>
+      <div className="fs-body">
+        {assets.map((a, i) => {
+          const pick = a.position === "PICK";
+          const [year, round, when] = pick ? pickTile(a.name) : [];
+          return (
+            <div key={`${a.id}-${i}`} className="fs-card" style={{ "--team": pick ? "var(--pos-pick)" : colors[a.team] }}>
+              {pick
+                ? <span className="fs-pick" aria-hidden="true"><small>{year}</small>{round}</span>
+                : <Headshot sport={sport} id={a.id} pos={a.position} size={52} />}
+              <div className="min-w-0 flex-1">
+                <div className="fs-name truncate">
+                  {pick ? <span style={{ color: "var(--text-primary)" }}>{year ? `${year} ${round} round pick` : a.name}</span>
+                    : <PlayerLink sport={sport} id={a.id} pos={a.position} className="">{a.name}</PlayerLink>}
+                </div>
+                <div className="fs-meta">
+                  {pick ? <>
+                    <span className="fs-chip" style={{ "--chip": "var(--pos-pick)" }}>PICK</span>
+                    {when && <span>{when}</span>}
+                  </> : <>
+                    <span className="fs-chip" style={{ "--chip": colors[a.team] }}>{a.team || "FA"}</span>
+                    <span>{a.position}{a.age ? ` · ${Math.floor(a.age)} yrs` : ""}</span>
+                  </>}
+                  <span>← from {fromName}</span>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <div className="fs-value">{fmtValue(a.value)}</div>
+                <div className="fs-value-sub">{a.posRank && !pick ? `${a.position}${a.posRank}` : "value"}</div>
+              </div>
+              <button type="button" onClick={() => onRemove(i)} aria-label={`Remove ${a.name}`}
+                className="fs-remove icon-btn-danger text-xs px-1.5 py-0.5 rounded shrink-0">✕</button>
+            </div>
+          );
+        })}
+        <div className="fs-add">
+          <span className="fs-add-plus" aria-hidden="true">+</span>
+          <div className="flex-1 min-w-0">
+            <AssetPicker rows={rows} exclude={exclude} onPick={onAdd} browse={browse}
+              placeholder={browse ? `Add from ${fromName}` : "Add a player or pick"} />
+          </div>
+        </div>
+        {has && (result.stud[index] > 0 || result.credit[index] > 0) && (
+          <div className="flex flex-col gap-0.5 px-1 pt-1">
+            {line("Player value", fmtValue(result.sums[index]))}
+            {result.stud[index] > 0 && line("Stud adjustment", `+${fmtValue(Math.round(result.stud[index]))}`)}
+            {result.credit[index] > 0 && line("Roster spot credit", `+${fmtValue(Math.round(result.credit[index]))}`)}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// The trade board's scoreboard: both sides' adjusted totals, the verdict between them
+// and each side's share of the trade.
+function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`) }) {
+  const { adjusted, gap, pct, winner, verdict } = result;
+  const total = Math.max(adjusted[0] + adjusted[1], 1);
+  const label = { incomplete: "Add both sides", fair: "Fair trade", slight: `Slight edge: ${names[winner]}`, favors: `${names[winner]} wins` }[verdict];
+  const color = verdict === "fair" ? "var(--trend-up)" : verdict === "incomplete" ? "var(--text-muted)" : SIDE_COLOR[TRADE_SIDES[winner]];
+  const num = (i) => (
+    <div className="min-w-0" style={{ textAlign: i ? "right" : "left" }}>
+      <div className="text-xs font-semibold uppercase tracking-wide truncate" style={{ color: SIDE_COLOR[TRADE_SIDES[i]] }}>{names[i]}</div>
+      <div className="fs-score-num" style={{ color: "var(--text-primary)" }}>{Math.round(adjusted[i]).toLocaleString()}</div>
+    </div>
+  );
+  return (
+    <div className="fs-score">
+      <div className="grid items-center gap-3" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,auto) minmax(0,1fr)" }}>
+        {num(0)}
+        <div className="flex flex-col items-center gap-1 min-w-0">
+          <span className="fs-verdict" style={{ "--verdict": color }}>{label}</span>
+          {verdict !== "incomplete" && verdict !== "fair" && (
+            <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+              by {Math.round(Math.abs(gap)).toLocaleString()} ({Math.round(pct * 100)}%)
+            </span>
+          )}
+        </div>
+        {num(1)}
+      </div>
+      <div className="flex h-2.5 gap-0.5" role="img" aria-label={`Team A ${Math.round(adjusted[0])}, Team B ${Math.round(adjusted[1])}`}>
+        {TRADE_SIDES.map((s, i) => (
+          <div key={s} style={{ width: `${(adjusted[i] / total) * 100}%`, background: SIDE_COLOR[s], borderRadius: i === 0 ? "9999px 0 0 9999px" : "0 9999px 9999px 0" }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- trade board leagues ---------- */
+// The trade desks can be tied to one of your Sleeper leagues: each side then
+// picks a team, and its "add" box lists the other team's roster (what it can
+// get from them). The league list comes from the Sleeper username saved on My
+// Leagues, plus your saved league; the choice is remembered per sport ("" =
+// no league).
+const TRADE_LEAGUE_KEY = { nfl: DYNASTY_LEAGUE_KEY, nba: "ff-valuediff:nba-trade-league" };
+
+function useTradeLeague(sport) {
+  const my = React.useContext(MyLeagueContext);
+  const saved = my[sport];
+  const [leagueId, setLeagueIdState] = useState(() => {
+    try { const v = localStorage.getItem(TRADE_LEAGUE_KEY[sport]); if (v !== null) return v; } catch (e) {}
+    return saved?.leagueId || "";
+  });
+  const [list, setList] = useState([]);
+  const [me, setMe] = useState(null);
+  const [raw, setRaw] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const chosen = useRef(false); // picked here (not restored), so the desk takes on the league's settings
+
+  useEffect(() => {
+    let name = "";
+    try { name = (localStorage.getItem(SLEEPER_USER_KEY) || "").trim(); } catch (e) {}
+    if (!name || /^\d{9,}$/.test(name)) return;
+    let cancelled = false;
+    (async () => {
+      const u = await sleeperGet(`/user/${encodeURIComponent(name)}`);
+      if (!u || cancelled) return;
+      const st = await sleeperGet(`/state/${sport}`);
+      const leagues = (await sleeperGet(`/user/${u.user_id}/leagues/${sport}/${st.league_season || st.season}`)) || [];
+      if (cancelled) return;
+      setMe(u.user_id);
+      setList(leagues.map((l) => ({ id: String(l.league_id), name: l.name })));
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [sport]);
+
+  useEffect(() => {
+    setRaw(null);
+    if (!leagueId) { setStatus("idle"); return; }
+    let cancelled = false;
+    setStatus("loading");
+    Promise.all([
+      sleeperGet(`/league/${leagueId}`), sleeperGet(`/league/${leagueId}/rosters`), sleeperGet(`/league/${leagueId}/users`),
+      sport === "nfl" ? sleeperGet(`/league/${leagueId}/traded_picks`) : Promise.resolve([]),
+    ]).then(([league, rosters, users, traded]) => {
+      if (cancelled) return;
+      if (!league || league.sport !== sport) throw new Error("no such league");
+      setRaw({ league, rosters: rosters || [], users: users || [], traded: traded || [], picked: chosen.current });
+      chosen.current = false;
+      setStatus("ready");
+    }).catch(() => { if (!cancelled) setStatus("error"); });
+    return () => { cancelled = true; };
+  }, [leagueId, sport]);
+
+  const setLeagueId = (id) => {
+    chosen.current = true;
+    setLeagueIdState(id);
+    try { localStorage.setItem(TRADE_LEAGUE_KEY[sport], id); } catch (e) {}
+  };
+  const options = useMemo(() => {
+    const out = [...list];
+    const add = (id, name) => { if (id && !out.some((o) => o.id === id)) out.unshift({ id, name }); };
+    add(saved?.leagueId, saved?.name || "My league");
+    if (raw) add(String(raw.league.league_id), raw.league.name);
+    return out;
+  }, [list, raw, saved?.leagueId, saved?.name]);
+  const userId = me || (saved?.leagueId === leagueId ? saved?.userId : null);
+  return { options, leagueId, setLeagueId, raw, status, userId };
+}
+
+// A league's teams for the trade board: { rosterId, ownerIds, name, ids (Set
+// of what it owns: players, and in football its rookie picks) }.
+function tradeLeagueTeams(sport, raw, rows, byId) {
+  if (!raw || !rows.length) return [];
+  if (sport === "nfl") {
+    return buildLeagueTeams(raw, rows, byId)
+      .map((t) => ({ rosterId: t.rosterId, ownerIds: t.ownerIds, name: t.name, ids: new Set(t.assets.map((a) => a.id)) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const names = Object.fromEntries((raw.users || []).map((u) => [u.user_id, u.metadata?.team_name || u.display_name]));
+  return raw.rosters.map((r) => ({
+    rosterId: r.roster_id, ownerIds: [r.owner_id, ...(r.co_owners || [])], name: names[r.owner_id] || `Team ${r.roster_id}`,
+    ids: new Set([...(r.players || []), ...(r.reserve || []), ...(r.taxi || [])].map(String)),
+  })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function TradeLeaguePicker({ league }) {
+  if (!league.options.length) return null;
+  return (
+    <LabeledControl label="League">
+      <span className="flex items-center gap-2">
+        <select value={league.leagueId} onChange={(e) => league.setLeagueId(e.target.value)} aria-label="League"
+          className="rounded-md border px-2 py-1 text-sm max-w-[15rem]" style={inputStyle}>
+          <option value="">No league</option>
+          {league.options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        {league.status === "loading" && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Loading…</span>}
+        {league.status === "error" && <span className="text-xs" style={{ color: "var(--series-red)" }}>Couldn't load it</span>}
+      </span>
+    </LabeledControl>
+  );
+}
+
+// The trade board, both sports: the two team columns with a swap button
+// between them, then the scoreboard. With a league, each column picks a team
+// and adds from the other team's roster (basketball picks aren't tracked per
+// team, so they're always on offer). onSides gets { names, offers } (each side's
+// name and what it can get), for the verdict.
+function TradeBoard({ sport = "nfl", sides, setSides, byId, rows, exclude, onAdd, onRemove, result, league, onSides }) {
+  const teams = useMemo(() => tradeLeagueTeams(sport, league?.raw, rows, byId), [sport, league?.raw, rows, byId]);
+  const [teamIds, setTeamIds] = useState([null, null]);
+  // A new league starts with your own team as Team A.
+  useEffect(() => {
+    const mine = league?.userId && teams.find((t) => t.ownerIds.includes(league.userId));
+    setTeamIds([mine ? mine.rosterId : null, null]);
+  }, [league?.raw, teams.length > 0, league?.userId]);
+  const team = (i) => teams.find((t) => t.rosterId === teamIds[i]) || null;
+  const names = TRADE_SIDES.map((s, i) => team(i)?.name || `Team ${s}`);
+  const offers = useMemo(() => [0, 1].map((i) => {
+    const other = teams.find((t) => t.rosterId === teamIds[1 - i]);
+    return other ? rows.filter((r) => other.ids.has(r.id) || (sport === "nba" && r.pick)) : rows;
+  }), [teams, teamIds, rows, sport]);
+  const offer = (i) => offers[i];
+  useEffect(() => { onSides?.({ names, offers }); }, [names[0], names[1], offers]);
+  const swap = () => { setSides(([a, b]) => [b, a]); setTeamIds(([a, b]) => [b, a]); };
+  return (
+    <>
+      <div className="grid gap-3 items-start md:grid-cols-[1fr_auto_1fr]">
+        {TRADE_SIDES.map((s, si) => (
+          <React.Fragment key={s}>
+            {si === 1 && (
+              <div className="flex justify-center md:pt-5">
+                <button type="button" className="fs-swap" onClick={swap} title="Swap the two sides" aria-label="Swap the two sides">⇄</button>
+              </div>
+            )}
+            <TradeBoardTeam sport={sport} side={s} index={si} ids={sides[si]} byId={byId} rows={offer(si)} exclude={exclude}
+              onAdd={(id) => onAdd(si, id)} onRemove={(idx) => onRemove(si, idx)} result={result}
+              name={names[si]} fromName={names[1 - si]} teams={teams} teamId={teamIds[si]} otherTeamId={teamIds[1 - si]}
+              onTeam={(id) => setTeamIds((t) => t.map((x, i) => (i === si ? id : x)))} browse={!!team(1 - si)} />
+          </React.Fragment>
+        ))}
+      </div>
+      {(sides[0].length > 0 || sides[1].length > 0) && <TradeBoardScore result={result} names={names} />}
+    </>
+  );
+}
+
 function NbaTrade({ data, settings, setSettings }) {
   const [sides, setSides] = useState(() => readTradeHash("nbatrade"));
   // A link at a market's values ("~dynasty", from the Trade Ledger) switches to them.
@@ -8850,6 +9151,12 @@ function NbaTrade({ data, settings, setSettings }) {
   const result = useMemo(() => evaluateTrade(sides.map((ids) => ids.map((id) => byId[id]?.value || 0)), ctx), [sides, byId, ctx]);
 
   const add = (si, id) => { if (!inDeal.has(id)) setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids))); };
+  // A league picked here sets the league size.
+  const league = useTradeLeague("nba");
+  const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
+  useEffect(() => {
+    if (league.raw?.picked) setSettings((s) => ({ ...s, teams: nearestOption(league.raw.league.total_rosters || 12, [8, 10, 12, 14, 16]) }));
+  }, [league.raw]);
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
 
   return (
@@ -8883,6 +9190,7 @@ function NbaTrade({ data, settings, setSettings }) {
             <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
               onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
           </LabeledControl>
+          <TradeLeaguePicker league={league} />
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
@@ -8896,14 +9204,9 @@ function NbaTrade({ data, settings, setSettings }) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {TRADE_SIDES.map((s, si) => (
-          <TradeSide key={s} sport="nba" label={`Team ${s}`} color={SIDE_COLOR[s]} ids={sides[si]} byId={byId} rows={rows}
-            exclude={inDeal} onAdd={(id) => add(si, id)} onRemove={(idx) => remove(si, idx)} result={result} index={si} />
-        ))}
-      </div>
-
-      <TradeVerdict sport="nba" sides={sides} byId={byId} rows={rows} ctx={ctx} result={result} />
+      <TradeBoard sport="nba" sides={sides} setSides={setSides} byId={byId} rows={rows} exclude={inDeal}
+        onAdd={add} onRemove={remove} result={result} league={league} onSides={setBoard} />
+      <TradeVerdict sport="nba" sides={sides} byId={byId} rows={rows} ctx={ctx} result={result} board names={board.names} offers={board.offers} />
 
       {useMarket ? <TradeComparables sport="nba" db={tradesDb} list={tradeList} sides={sides} format={source} label={source} />
         : (sides[0].length > 0 || sides[1].length > 0) && (

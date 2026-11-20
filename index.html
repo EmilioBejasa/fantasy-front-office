@@ -8934,7 +8934,44 @@ function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, 
 
 // The trade board's scoreboard: both sides' adjusted totals, the verdict between them
 // and each side's share of the trade.
-function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`) }) {
+// The trade as text for a group chat: what each side gets, the verdict and the link.
+function tradeShareText(sides, byId, names, result) {
+  const label = (id) => byId[id]?.name || (id.startsWith("FP_") ? `${id.split("_")[1]} rookie pick` : "unknown player");
+  const list = (ids) => ids.map(label).join(", ") || "nothing";
+  const { verdict, winner, gap, pct } = result;
+  const call = verdict === "fair" ? "Fair trade"
+    : verdict === "incomplete" ? "Not finished yet"
+    : `${verdict === "slight" ? "Slightly favors" : "Favors"} ${names[winner]} by ${Math.round(Math.abs(gap)).toLocaleString()} (${Math.round(pct * 100)}%)`;
+  return `${names[0]} gets: ${list(sides[0])}\n${names[1]} gets: ${list(sides[1])}\n${call} on Fantasy Front Office`;
+}
+
+// Share the trade: the phone's share sheet when there is one, otherwise copy
+// the text and link.
+function ShareTradeButton({ text }) {
+  const [state, setState] = useState("idle");
+  useEffect(() => { setState("idle"); }, [text]);
+  const share = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share && window.matchMedia?.("(pointer: coarse)").matches) {
+        await navigator.share({ title: "Trade on Fantasy Front Office", text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setState("copied");
+    } catch (e) {
+      if (e?.name !== "AbortError") setState("failed");
+    }
+  };
+  return (
+    <button type="button" onClick={share} className="pill text-xs rounded-full px-3 py-1 font-medium"
+      title="Copy the trade, the verdict and a link to it">
+      {state === "copied" ? "Copied ✓" : state === "failed" ? "Couldn't copy" : "Share trade"}
+    </button>
+  );
+}
+
+function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`), shareText }) {
   const { adjusted, gap, pct, winner, verdict } = result;
   const total = Math.max(adjusted[0] + adjusted[1], 1);
   const label = { incomplete: "Add both sides", fair: "Fair trade", slight: `Slight edge: ${names[winner]}`, favors: `${names[winner]} wins` }[verdict];
@@ -8964,6 +9001,7 @@ function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`) }
           <div key={s} style={{ width: `${(adjusted[i] / total) * 100}%`, background: SIDE_COLOR[s], borderRadius: i === 0 ? "9999px 0 0 9999px" : "0 9999px 9999px 0" }} />
         ))}
       </div>
+      {shareText && <div className="flex justify-end"><ShareTradeButton text={shareText} /></div>}
     </div>
   );
 }
@@ -9112,7 +9150,9 @@ function TradeBoard({ sport = "nfl", sides, setSides, byId, rows, exclude, onAdd
           </React.Fragment>
         ))}
       </div>
-      {(sides[0].length > 0 || sides[1].length > 0) && <TradeBoardScore result={result} names={names} />}
+      {(sides[0].length > 0 || sides[1].length > 0) && (
+        <TradeBoardScore result={result} names={names} shareText={tradeShareText(sides, byId, names, result)} />
+      )}
     </>
   );
 }

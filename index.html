@@ -258,10 +258,6 @@
     background: linear-gradient(135deg, var(--side), color-mix(in srgb, var(--side) 62%, #000)); }
   .fs-head-kicker { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
   .fs-head-name { font-size: 22px; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
-  .fs-team-select { font-size: 20px; font-weight: 800; line-height: 1.2; color: #fff; background: transparent; border: 0; padding: 0;
-    max-width: 100%; cursor: pointer; text-overflow: ellipsis; border-radius: 4px; }
-  .fs-team-select:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  .fs-team-select option { color: var(--text-primary); background: var(--surface-1); font-size: 14px; font-weight: 500; }
   .fs-head-total { font-size: 26px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; text-align: right; }
   .fs-head-sub { font-size: 11px; opacity: .8; text-align: right; margin-top: 3px; }
   .fs-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
@@ -3017,21 +3013,19 @@ function writeTradeHash(sides, key = "trade", emptyHash = "#/trade", values = ""
   try { window.history.replaceState(null, "", hash); } catch (e) {}
 }
 
-// `browse`: list everything in `rows` when the box is focused and empty (a
-// league team's roster on the trade board), not just search matches.
-function AssetPicker({ rows, exclude, onPick, browse = false, placeholder = "Add a player or pick" }) {
+function AssetPicker({ rows, exclude, onPick }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return browse ? rows.filter((r) => !exclude.has(r.id)).slice(0, 60) : [];
-    return rows.filter((r) => !exclude.has(r.id) && r.name.toLowerCase().includes(q)).slice(0, browse ? 60 : 8);
-  }, [rows, query, exclude, browse]);
+    if (!q) return [];
+    return rows.filter((r) => !exclude.has(r.id) && r.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [rows, query, exclude]);
   const pick = (r) => { onPick(r.id); setQuery(""); };
 
   return (
     <div className="relative">
-      <input type="search" value={query} placeholder={placeholder} aria-label={placeholder}
+      <input type="search" value={query} placeholder="Add a player or pick" aria-label="Add a player or pick"
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
         onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) { e.preventDefault(); pick(matches[0]); } }}
@@ -3062,8 +3056,7 @@ function AssetPicker({ rows, exclude, onPick, browse = false, placeholder = "Add
 
 // `board`: the scoreboard above already shows the verdict and totals, so leave
 // out the headline and bar (the trade board).
-// `offers`: what each side can get (a league team's roster), for the suggestions.
-function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = false, names = TRADE_SIDES.map((s) => `Team ${s}`), offers = null }) {
+function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = false }) {
   // Three assets (not already in the deal) that come closest to evening it
   // out if added to the side getting less, re-running the full formula.
   const suggestions = useMemo(() => {
@@ -3071,7 +3064,7 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = f
     const loser = 1 - result.winner;
     const inDeal = new Set([...sides[0], ...sides[1]]);
     const values = sides.map((ids) => ids.map((id) => byId[id]?.value || 0));
-    return (offers?.[loser] || rows)
+    return rows
       .filter((r) => !inDeal.has(r.id))
       .map((r) => {
         const next = values.map((v, i) => (i === loser ? [...v, r.value] : v));
@@ -3080,11 +3073,11 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = f
       .sort((x, y) => x.miss - y.miss)
       .slice(0, 3)
       .map((x) => x.r);
-  }, [sides, byId, rows, ctx, result, offers]);
+  }, [sides, byId, rows, ctx, result]);
 
   if (!sides[0].length && !sides[1].length) return null;
   const { adjusted, gap, pct, winner, verdict } = result;
-  const winnerName = names[winner];
+  const winnerName = `Team ${TRADE_SIDES[winner]}`;
   const headline = { incomplete: "Add something to both sides", fair: "Fair trade", slight: `Slightly favors ${winnerName}`, favors: `Favors ${winnerName}` }[verdict];
   const waiver = replacementPlayer(ctx.playerValues, ctx.teams, 1, ctx.rosterSpots);
 
@@ -3116,7 +3109,7 @@ function TradeVerdict({ sport = "nfl", sides, byId, rows, ctx, result, board = f
       </>}
       {suggestions.length > 0 && (
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          To even it out, {names[1 - winner]} could also get{" "}
+          To even it out, Team {TRADE_SIDES[1 - winner]} could also get{" "}
           {suggestions.map((r, i) => (
             <span key={r.id}>
               {i > 0 && (i === suggestions.length - 1 ? " or " : ", ")}
@@ -7276,13 +7269,6 @@ function TradeCalculator({ data, settings, setSettings }) {
     setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids)));
   };
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
-  // With a league, the desk follows it: dynasty or redraft (keepers count as
-  // dynasty), QB, size and scoring, each time it loads.
-  const league = useTradeLeague("nfl");
-  const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
-  useEffect(() => {
-    if (league.raw) setSettings((s) => ({ ...s, ...settingsFromLeague(league.raw.league) }));
-  }, [league.raw]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -7300,10 +7286,7 @@ function TradeCalculator({ data, settings, setSettings }) {
       </header>
 
       <div className="flex items-end justify-between flex-wrap gap-3">
-        <div className="flex items-end flex-wrap gap-x-4 gap-y-3">
-          <LeagueSettings settings={settings} setSettings={setSettings} />
-          <TradeLeaguePicker league={league} sport="nfl" />
-        </div>
+        <LeagueSettings settings={settings} setSettings={setSettings} />
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
             className="pill text-xs rounded-full px-3 py-1 font-medium" aria-pressed={settings.raw}
@@ -7317,8 +7300,8 @@ function TradeCalculator({ data, settings, setSettings }) {
       </div>
 
       <TradeBoard sides={sides} setSides={setSides} byId={byId} rows={data.rows} exclude={inDeal}
-        onAdd={add} onRemove={remove} result={result} league={league} onSides={setBoard} />
-      <TradeVerdict sides={sides} byId={byId} rows={data.rows} ctx={ctx} result={result} board names={board.names} offers={board.offers} />
+        onAdd={add} onRemove={remove} result={result} />
+      <TradeVerdict sides={sides} byId={byId} rows={data.rows} ctx={ctx} result={result} board />
 
       <div className="flex flex-col gap-3">
         <div aria-label="More on this trade"><PillGroup options={tabOptions} value={tab} onChange={pickTab} scroll /></div>
@@ -8848,8 +8831,8 @@ const pickTile = (name) => {
 // One team's column on the trade board (both sports): a colored header with
 // what the side gets in total, then a card per player or pick (headshot, team,
 // where he's coming from, his value) and an "add" slot.
-function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, onAdd, onRemove, result,
-  name = `Team ${side}`, fromName = `Team ${TRADE_SIDES[1 - index]}`, teams = [], teamId = null, otherTeamId = null, onTeam, browse = false }) {
+function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, onAdd, onRemove, result }) {
+  const fromName = `Team ${TRADE_SIDES[1 - index]}`;
   const colors = TEAM_COLOR[sport] || {};
   const assets = ids.map((id) => byId[id] || {
     id, position: id.startsWith("FP_") ? "PICK" : "?", value: 0,
@@ -8863,17 +8846,11 @@ function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, 
     </div>
   );
   return (
-    <section className="fs-team" style={{ "--side": SIDE_COLOR[side] }} aria-label={`${name} receives`}>
+    <section className="fs-team" style={{ "--side": SIDE_COLOR[side] }} aria-label={`Team ${side} receives`}>
       <header className="fs-head">
         <div className="min-w-0">
           <div className="fs-head-kicker">Receives</div>
-          {teams.length > 0 ? (
-            <select className="fs-team-select" value={teamId ?? ""} aria-label={`Team ${side}: pick a team from the league`}
-              onChange={(e) => onTeam(e.target.value === "" ? null : Number(e.target.value))}>
-              <option value="">Team {side} (any team)</option>
-              {teams.map((t) => <option key={t.rosterId} value={t.rosterId} disabled={t.rosterId === otherTeamId}>{t.name}</option>)}
-            </select>
-          ) : <div className="fs-head-name">{name}</div>}
+          <div className="fs-head-name">Team {side}</div>
         </div>
         <div className="shrink-0">
           <div className="fs-head-total">{has ? fmtValue(Math.round(result.adjusted[index])) : "–"}</div>
@@ -8917,8 +8894,7 @@ function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, 
         <div className="fs-add">
           <span className="fs-add-plus" aria-hidden="true">+</span>
           <div className="flex-1 min-w-0">
-            <AssetPicker rows={rows} exclude={exclude} onPick={onAdd} browse={browse}
-              placeholder={browse ? `Add from ${fromName}` : "Add a player or pick"} />
+            <AssetPicker rows={rows} exclude={exclude} onPick={onAdd} />
           </div>
         </div>
         {has && (result.stud[index] > 0 || result.credit[index] > 0) && (
@@ -8936,7 +8912,8 @@ function TradeBoardTeam({ sport = "nfl", side, index, ids, byId, rows, exclude, 
 // The trade board's scoreboard: both sides' adjusted totals, the verdict between them
 // and each side's share of the trade.
 // The trade as text for a group chat: what each side gets, the verdict and the link.
-function tradeShareText(sides, byId, names, result) {
+function tradeShareText(sides, byId, result) {
+  const names = TRADE_SIDES.map((s) => `Team ${s}`);
   const label = (id) => byId[id]?.name || (id.startsWith("FP_") ? `${id.split("_")[1]} rookie pick` : "unknown player");
   const list = (ids) => ids.map(label).join(", ") || "nothing";
   const { verdict, winner, gap, pct } = result;
@@ -8972,7 +8949,8 @@ function ShareTradeButton({ text }) {
   );
 }
 
-function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`), shareText }) {
+function TradeBoardScore({ result, shareText }) {
+  const names = TRADE_SIDES.map((s) => `Team ${s}`);
   const { adjusted, gap, pct, winner, verdict } = result;
   const total = Math.max(adjusted[0] + adjusted[1], 1);
   const label = { incomplete: "Add both sides", fair: "Fair trade", slight: `Slight edge: ${names[winner]}`, favors: `${names[winner]} wins` }[verdict];
@@ -9007,145 +8985,9 @@ function TradeBoardScore({ result, names = TRADE_SIDES.map((s) => `Team ${s}`), 
   );
 }
 
-/* ---------- trade board leagues ---------- */
-// The trade desks can be tied to one of your Sleeper leagues: each side then
-// picks a team, and its "add" box lists the other team's roster (what it can
-// get from them). The league list comes from the Sleeper username saved on My
-// Leagues, plus your saved league; the choice is remembered per sport ("" =
-// no league).
-const TRADE_LEAGUE_KEY = { nfl: DYNASTY_LEAGUE_KEY, nba: "ff-valuediff:nba-trade-league" };
-
-function useTradeLeague(sport) {
-  const my = React.useContext(MyLeagueContext);
-  const saved = my[sport];
-  const [leagueId, setLeagueIdState] = useState(() => {
-    try { const v = localStorage.getItem(TRADE_LEAGUE_KEY[sport]); if (v !== null) return v; } catch (e) {}
-    return saved?.leagueId || "";
-  });
-  const [list, setList] = useState([]);
-  const [me, setMe] = useState(null);
-  const [raw, setRaw] = useState(null);
-  const [status, setStatus] = useState("idle");
-  const chosen = useRef(false); // picked here (not restored), so the desk takes on the league's settings
-
-  useEffect(() => {
-    let name = "";
-    try { name = (localStorage.getItem(SLEEPER_USER_KEY) || "").trim(); } catch (e) {}
-    if (!name || /^\d{9,}$/.test(name)) return;
-    let cancelled = false;
-    (async () => {
-      const u = await sleeperGet(`/user/${encodeURIComponent(name)}`);
-      if (!u || cancelled) return;
-      const st = await sleeperGet(`/state/${sport}`);
-      const leagues = (await sleeperGet(`/user/${u.user_id}/leagues/${sport}/${st.league_season || st.season}`)) || [];
-      if (cancelled) return;
-      setMe(u.user_id);
-      setList(leagues.map((l) => ({ id: String(l.league_id), name: l.name })));
-    })().catch(() => {});
-    return () => { cancelled = true; };
-  }, [sport]);
-
-  useEffect(() => {
-    setRaw(null);
-    if (!leagueId) { setStatus("idle"); return; }
-    let cancelled = false;
-    setStatus("loading");
-    Promise.all([
-      sleeperGet(`/league/${leagueId}`), sleeperGet(`/league/${leagueId}/rosters`), sleeperGet(`/league/${leagueId}/users`),
-      sport === "nfl" ? sleeperGet(`/league/${leagueId}/traded_picks`) : Promise.resolve([]),
-    ]).then(([league, rosters, users, traded]) => {
-      if (cancelled) return;
-      if (!league || league.sport !== sport) throw new Error("no such league");
-      setRaw({ league, rosters: rosters || [], users: users || [], traded: traded || [], picked: chosen.current });
-      chosen.current = false;
-      setStatus("ready");
-    }).catch(() => { if (!cancelled) setStatus("error"); });
-    return () => { cancelled = true; };
-  }, [leagueId, sport]);
-
-  const setLeagueId = (id) => {
-    chosen.current = true;
-    setLeagueIdState(id);
-    try { localStorage.setItem(TRADE_LEAGUE_KEY[sport], id); } catch (e) {}
-  };
-  const options = useMemo(() => {
-    const out = [...list];
-    const add = (id, name) => { if (id && !out.some((o) => o.id === id)) out.unshift({ id, name }); };
-    add(saved?.leagueId, saved?.name || "My league");
-    if (raw) add(String(raw.league.league_id), raw.league.name);
-    return out;
-  }, [list, raw, saved?.leagueId, saved?.name]);
-  const userId = me || (saved?.leagueId === leagueId ? saved?.userId : null);
-  return { options, leagueId, setLeagueId, raw, status, userId };
-}
-
-// A league's teams for the trade board: { rosterId, ownerIds, name, ids (Set
-// of what it owns: players, and in football its rookie picks) }.
-function tradeLeagueTeams(sport, raw, rows, byId) {
-  if (!raw || !rows.length) return [];
-  if (sport === "nfl") {
-    return buildLeagueTeams(raw, rows, byId)
-      .map((t) => ({ rosterId: t.rosterId, ownerIds: t.ownerIds, name: t.name, ids: new Set(t.assets.map((a) => a.id)) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-  const names = Object.fromEntries((raw.users || []).map((u) => [u.user_id, u.metadata?.team_name || u.display_name]));
-  return raw.rosters.map((r) => ({
-    rosterId: r.roster_id, ownerIds: [r.owner_id, ...(r.co_owners || [])], name: names[r.owner_id] || `Team ${r.roster_id}`,
-    ids: new Set([...(r.players || []), ...(r.reserve || []), ...(r.taxi || [])].map(String)),
-  })).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-// Keeper leagues value the future, so they count as dynasty (as in settingsFromLeague).
-const leagueIsDynasty = (league) => [1, 2].includes(league?.settings?.type);
-
-function TradeLeaguePicker({ league, sport }) {
-  if (!league.options.length) return null;
-  const l = league.status === "ready" && league.raw?.league;
-  const detected = l && (sport === "nfl" ? leagueTags(l)
-    : [LEAGUE_TYPE_LABEL[l.settings?.type] || "Redraft", `${l.total_rosters} teams`].join(" · "));
-  return (
-    <LabeledControl label="League">
-      <span className="flex items-center gap-2">
-        <select value={league.leagueId} onChange={(e) => league.setLeagueId(e.target.value)} aria-label="League"
-          className="rounded-md border px-2 py-1 text-sm max-w-[15rem]" style={inputStyle}>
-          <option value="">No league</option>
-          {league.options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        {league.status === "loading" && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Loading…</span>}
-        {league.status === "error" && <span className="text-xs" style={{ color: "var(--series-red)" }}>Couldn't load it</span>}
-        {detected && (
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}
-            title="The desk is set to this league's format; you can still change the settings by hand">
-            {detected}
-          </span>
-        )}
-      </span>
-    </LabeledControl>
-  );
-}
-
 // The trade board, both sports: the two team columns with a swap button
-// between them, then the scoreboard. With a league, each column picks a team
-// and adds from the other team's roster (basketball picks aren't tracked per
-// team, so they're always on offer). onSides gets { names, offers } (each side's
-// name and what it can get), for the verdict.
-function TradeBoard({ sport = "nfl", sides, setSides, byId, rows, exclude, onAdd, onRemove, result, league, onSides }) {
-  const teams = useMemo(() => tradeLeagueTeams(sport, league?.raw, rows, byId), [sport, league?.raw, rows, byId]);
-  const [teamIds, setTeamIds] = useState([null, null]);
-  // A new league starts with your own team as Team A.
-  useEffect(() => {
-    const mine = league?.userId && teams.find((t) => t.ownerIds.includes(league.userId));
-    setTeamIds([mine ? mine.rosterId : null, null]);
-  }, [league?.raw, teams.length > 0, league?.userId]);
-  const team = (i) => teams.find((t) => t.rosterId === teamIds[i]) || null;
-  const names = TRADE_SIDES.map((s, i) => team(i)?.name || `Team ${s}`);
-  const offers = useMemo(() => [0, 1].map((i) => {
-    const other = teams.find((t) => t.rosterId === teamIds[1 - i]);
-    return other ? rows.filter((r) => other.ids.has(r.id) || (sport === "nba" && r.pick)) : rows;
-  }), [teams, teamIds, rows, sport]);
-  const offer = (i) => offers[i];
-  useEffect(() => { onSides?.({ names, offers }); }, [names[0], names[1], offers]);
-  const swap = () => { setSides(([a, b]) => [b, a]); setTeamIds(([a, b]) => [b, a]); };
+// between them, then the scoreboard. It's for any trade, not tied to a league.
+function TradeBoard({ sport = "nfl", sides, setSides, byId, rows, exclude, onAdd, onRemove, result }) {
   return (
     <>
       <div className="grid gap-3 items-start md:grid-cols-[1fr_auto_1fr]">
@@ -9153,18 +8995,17 @@ function TradeBoard({ sport = "nfl", sides, setSides, byId, rows, exclude, onAdd
           <React.Fragment key={s}>
             {si === 1 && (
               <div className="flex justify-center md:pt-5">
-                <button type="button" className="fs-swap" onClick={swap} title="Swap the two sides" aria-label="Swap the two sides">⇄</button>
+                <button type="button" className="fs-swap" onClick={() => setSides(([a, b]) => [b, a])}
+                  title="Swap the two sides" aria-label="Swap the two sides">⇄</button>
               </div>
             )}
-            <TradeBoardTeam sport={sport} side={s} index={si} ids={sides[si]} byId={byId} rows={offer(si)} exclude={exclude}
-              onAdd={(id) => onAdd(si, id)} onRemove={(idx) => onRemove(si, idx)} result={result}
-              name={names[si]} fromName={names[1 - si]} teams={teams} teamId={teamIds[si]} otherTeamId={teamIds[1 - si]}
-              onTeam={(id) => setTeamIds((t) => t.map((x, i) => (i === si ? id : x)))} browse={!!team(1 - si)} />
+            <TradeBoardTeam sport={sport} side={s} index={si} ids={sides[si]} byId={byId} rows={rows} exclude={exclude}
+              onAdd={(id) => onAdd(si, id)} onRemove={(idx) => onRemove(si, idx)} result={result} />
           </React.Fragment>
         ))}
       </div>
       {(sides[0].length > 0 || sides[1].length > 0) && (
-        <TradeBoardScore result={result} names={names} shareText={tradeShareText(sides, byId, names, result)} />
+        <TradeBoardScore result={result} shareText={tradeShareText(sides, byId, result)} />
       )}
     </>
   );
@@ -9204,20 +9045,6 @@ function NbaTrade({ data, settings, setSettings }) {
   const result = useMemo(() => evaluateTrade(sides.map((ids) => ids.map((id) => byId[id]?.value || 0)), ctx), [sides, byId, ctx]);
 
   const add = (si, id) => { if (!inDeal.has(id)) setSides((s) => s.map((ids, i) => (i === si ? [...ids, id] : ids))); };
-  // With a league, the desk follows it each time it loads: its size, and
-  // dynasty market values for a dynasty or keeper league. A redraft league
-  // keeps Season stats or Redraft market, whichever is picked (Dynasty
-  // market switches to Redraft market).
-  const league = useTradeLeague("nba");
-  const [board, setBoard] = useState({ names: TRADE_SIDES.map((s) => `Team ${s}`), offers: null });
-  useEffect(() => {
-    if (!league.raw) return;
-    const dynasty = leagueIsDynasty(league.raw.league);
-    setSettings((s) => ({
-      ...s, teams: nearestOption(league.raw.league.total_rosters || 12, [8, 10, 12, 14, 16]),
-      values: dynasty ? "dynasty" : (s.values === "dynasty" ? "redraft" : s.values || "season"),
-    }));
-  }, [league.raw]);
   const remove = (si, idx) => setSides((s) => s.map((ids, i) => (i === si ? ids.filter((_, j) => j !== idx) : ids)));
 
   return (
@@ -9251,7 +9078,6 @@ function NbaTrade({ data, settings, setSettings }) {
             <PillGroup options={NBA_SETTING_OPTIONS.teams} value={settings.teams}
               onChange={(v) => setSettings((s) => ({ ...s, teams: v }))} />
           </LabeledControl>
-          <TradeLeaguePicker league={league} sport="nba" />
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setSettings((s) => ({ ...s, raw: !s.raw }))}
@@ -9266,8 +9092,8 @@ function NbaTrade({ data, settings, setSettings }) {
       </div>
 
       <TradeBoard sport="nba" sides={sides} setSides={setSides} byId={byId} rows={rows} exclude={inDeal}
-        onAdd={add} onRemove={remove} result={result} league={league} onSides={setBoard} />
-      <TradeVerdict sport="nba" sides={sides} byId={byId} rows={rows} ctx={ctx} result={result} board names={board.names} offers={board.offers} />
+        onAdd={add} onRemove={remove} result={result} />
+      <TradeVerdict sport="nba" sides={sides} byId={byId} rows={rows} ctx={ctx} result={result} board />
 
       {useMarket ? <TradeComparables sport="nba" db={tradesDb} list={tradeList} sides={sides} format={source} label={source} />
         : (sides[0].length > 0 || sides[1].length > 0) && (
@@ -12080,8 +11906,7 @@ function InfoPage({ page, navigate }) {
         </InfoSection>
         <InfoSection title="What's saved in your browser">
           <p>The site keeps a few things in your browser's local storage so they're there next time: your theme and sport,
-            calculator settings, the Sleeper username or league you looked up, your saved league, the league picked on the
-            Trade Desks, roster alerts you've seen, and cached copies of scores and player lists. It never leaves your device
+            calculator settings, the Sleeper username or league you looked up, your saved league, roster alerts you've seen, and cached copies of scores and player lists. It never leaves your device
             and you can remove it any time:</p>
           <ClearDataButton />
         </InfoSection>

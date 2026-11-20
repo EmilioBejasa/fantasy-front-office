@@ -11174,6 +11174,10 @@ const PAGES = [
     blurb: "The last 30 days of real Sleeper basketball trades with today's values: search any players and picks to see what they went for." },
   { key: "nba-trade", sport: "nba", label: "Trade Analyzer", short: "Trade Desk", hash: "#/nba/trade", group: "Front office",
     blurb: "See who wins a trade, valued on rest-of-season points or the Trade Market's dynasty and redraft values." },
+  // Site information (footer links); hidden from the nav, title themselves.
+  { key: "about", label: "About", short: "About", hash: "#/about", hidden: true },
+  { key: "privacy", label: "Privacy", short: "Privacy", hash: "#/privacy", hidden: true },
+  { key: "terms", label: "Terms", short: "Terms", hash: "#/terms", hidden: true },
 ];
 const PAGE_BY_KEY = Object.fromEntries(PAGES.map((p) => [p.key, p]));
 const SPORT_GROUPS = { nfl: ["Game week", "Dynasty"], nba: ["Game week", "Front office"] };
@@ -11223,6 +11227,7 @@ const PAGE_STYLE = {
   "nba-trade": { hue: "var(--hue-orange)", icon: PAGE_ICONS.trade },
   "nba-trade-db": { hue: "var(--hue-violet)", icon: PAGE_ICONS.ledger },
   "nba-market": { hue: "var(--hue-magenta)", icon: PAGE_ICONS.forecast },
+  about: { hue: "var(--hue-blue)" }, privacy: { hue: "var(--hue-blue)" }, terms: { hue: "var(--hue-blue)" },
 };
 
 // Trade pages keep their trade in the URL; remember the last one per sport so
@@ -11926,6 +11931,143 @@ function HomePage({ navigate, scores, dynasty, nba, sport, setSport }) {
   );
 }
 
+/* ---------- About, Privacy and Terms ---------- */
+const FEEDBACK_URL = "https://github.com/EmilioBejasa/fantasy-front-office/issues";
+const INFO_PAGES = [
+  { key: "about", label: "About" },
+  { key: "privacy", label: "Privacy" },
+  { key: "terms", label: "Terms" },
+];
+
+// Removes everything this site saved in the browser (every ff-valuediff: key).
+function clearSavedData() {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("ff-valuediff:")) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+    return keys.length;
+  } catch (e) { return 0; }
+}
+
+function InfoSection({ title, children }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
+      <div className="flex flex-col gap-2 text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{children}</div>
+    </section>
+  );
+}
+
+function ClearDataButton() {
+  const [step, setStep] = useState("idle"); // idle → confirm → done
+  if (step === "done") return <p className="text-sm font-medium" style={{ color: "var(--trend-up)" }}>Cleared. Reload the page to start fresh.</p>;
+  return (
+    <button type="button" className="pill text-xs rounded-full px-3 py-1 font-medium w-fit" style={{ "--pill-accent": "var(--series-red)" }}
+      onClick={() => { if (step === "confirm") { clearSavedData(); setStep("done"); } else setStep("confirm"); }}>
+      {step === "confirm" ? "Click again to clear everything" : "Clear my saved data"}
+    </button>
+  );
+}
+
+const ext = (href, text) => <a href={href} className="underline" target="_blank" rel="noopener noreferrer">{text}</a>;
+
+function InfoPage({ page, navigate }) {
+  const info = INFO_PAGES.find((p) => p.key === page) || INFO_PAGES[0];
+  useEffect(() => { document.title = `${info.label} · Fantasy Front Office`; }, [info.label]);
+  return (
+    <div className="flex flex-col gap-6 max-w-3xl">
+      <nav className="flex gap-2" aria-label="Site information">
+        {INFO_PAGES.map((p) => (
+          <a key={p.key} href={`#/${p.key}`} onClick={(e) => { e.preventDefault(); navigate(p.key); }}
+            className="pill text-xs rounded-full px-3 py-1 font-medium" aria-current={p.key === page ? "page" : undefined}
+            aria-pressed={p.key === page}>{p.label}</a>
+        ))}
+      </nav>
+      <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>{info.label}</h2>
+
+      {page === "about" && <>
+        <InfoSection title="What this is">
+          <p>Fantasy Front Office is a free companion for fantasy football and basketball: weekly scores, waiver targets,
+            injuries, rankings, trade values built from real trades, a trade calculator and your Sleeper leagues, in one place.</p>
+        </InfoSection>
+        <InfoSection title="Where the data comes from">
+          <p>Scores, stats, projections, injuries, trends and leagues come from {ext("https://sleeper.com", "Sleeper")}'s public API.
+            The Trade Market values (football and basketball) are this site's own, fit from completed trades in public Sleeper
+            leagues. In football, players the market doesn't list yet use {ext("https://fantasycalc.com", "FantasyCalc")}'s
+            value rescaled to the market's scale, and FantasyCalc and KeepTradeCut values also appear as comparisons, credited
+            where they're shown. The 2027 class
+            notes summarize public rankings (DraftSharks, Yahoo Sports) with links to them.</p>
+          <p>Values are opinions about the market, not facts. Use them as one input, not the final word.</p>
+        </InfoSection>
+        <InfoSection title="Not affiliated">
+          <p>This site isn't affiliated with, endorsed by or sponsored by the NFL, the NBA, their teams, Sleeper, ESPN, Yahoo,
+            FantasyCalc, KeepTradeCut or any other site it mentions. Team names are used only to identify teams.</p>
+        </InfoSection>
+        <InfoSection title="Feedback">
+          <p>Found a wrong value, a bug or have an idea? Open an issue on {ext(FEEDBACK_URL, "GitHub")}.</p>
+        </InfoSection>
+      </>}
+
+      {page === "privacy" && <>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>Last updated November 20, 2026.</p>
+        <InfoSection title="The short version">
+          <p>There are no accounts, no ads, no tracking cookies and no analytics. Nothing you do here is sent to this site's
+            owner. Your settings stay in your own browser.</p>
+        </InfoSection>
+        <InfoSection title="What's saved in your browser">
+          <p>The site keeps a few things in your browser's local storage so they're there next time: your theme and sport,
+            calculator settings, the Sleeper username or league you looked up, your saved league, the league picked on the
+            Trade Desks, roster alerts you've seen, and cached copies of scores and player lists. It never leaves your device
+            and you can remove it any time:</p>
+          <ClearDataButton />
+        </InfoSection>
+        <InfoSection title="Other services your browser talks to">
+          <p>Like any website, the pages and data files are served by GitHub Pages, which sees your IP address. While you use the
+            site your browser also contacts {ext("https://sleeper.com", "Sleeper")} (scores, players and any league or username
+            you enter), Sleeper's and ESPN's image servers (player headshots) and Google Fonts (the site's fonts). Each has its
+            own privacy policy. A Sleeper username or league ID you type is sent only to Sleeper, to look it up.</p>
+        </InfoSection>
+        <InfoSection title="Notifications">
+          <p>Roster alerts can show browser notifications if you turn them on. They're generated in your browser while the site
+            is open; nothing is sent to a server.</p>
+        </InfoSection>
+        <InfoSection title="Changes">
+          <p>If this changes (for example, if league sync for other platforms or privacy-friendly analytics are added), this
+            page will say so before it happens. Questions: {ext(FEEDBACK_URL, "open an issue on GitHub")}.</p>
+        </InfoSection>
+      </>}
+
+      {page === "terms" && <>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>Last updated November 20, 2026.</p>
+        <InfoSection title="For fun, not advice">
+          <p>Everything here is for entertainment and general information. Trade values, rankings, projections, waiver picks
+            and verdicts are estimates and opinions. They aren't financial, betting or professional advice, and you make your
+            own decisions in your leagues.</p>
+        </InfoSection>
+        <InfoSection title="No guarantees">
+          <p>The site is free and provided as is, without warranties of any kind. Data comes from third parties and can be
+            late, incomplete or wrong, and the site may be unavailable or change at any time. To the extent the law allows,
+            the owner isn't liable for losses from using it.</p>
+        </InfoSection>
+        <InfoSection title="Fair use">
+          <p>Use the site normally. Please don't scrape it heavily or use it to overload the services it relies on. Sleeper's
+            and other providers' own terms apply to their data.</p>
+        </InfoSection>
+        <InfoSection title="Trademarks">
+          <p>NFL, NBA, team names, Sleeper, ESPN, Yahoo and other names belong to their owners and are used only to identify
+            them. No affiliation or endorsement is implied.</p>
+        </InfoSection>
+        <InfoSection title="Changes">
+          <p>These terms may be updated; the date above shows the latest version.</p>
+        </InfoSection>
+      </>}
+    </div>
+  );
+}
+
 function SiteFooter({ navigate }) {
   return (
     <footer className="border-t mt-16" style={{ borderColor: "var(--border)" }}>
@@ -11951,6 +12093,12 @@ function SiteFooter({ navigate }) {
           Scores, stats, injuries and trends from <a href="https://sleeper.com" className="underline" target="_blank" rel="noopener noreferrer">Sleeper</a>.
           Football trade values are this site's own, fit from real trades in public Sleeper leagues; the player list and comparisons come from <a href="https://fantasycalc.com" className="underline" target="_blank" rel="noopener noreferrer">FantasyCalc</a> and <a href="https://keeptradecut.com" className="underline" target="_blank" rel="noopener noreferrer">KeepTradeCut</a>.
           Prospect rankings from DraftSharks and Yahoo Sports. Not affiliated with the NFL, the NBA or any of these sites.
+        </p>
+        <p className="max-w-6xl mx-auto px-4 pb-5 -mt-2 text-xs flex flex-wrap gap-x-4 gap-y-1" style={{ color: "var(--text-muted)" }}>
+          {INFO_PAGES.map((p) => (
+            <a key={p.key} href={`#/${p.key}`} onClick={(e) => { e.preventDefault(); navigate(p.key); }} className="underline">{p.label}</a>
+          ))}
+          <a href={FEEDBACK_URL} className="underline" target="_blank" rel="noopener noreferrer">Feedback</a>
         </p>
       </div>
     </footer>
@@ -12048,6 +12196,7 @@ function App() {
         )}
         <RoomBoundary key={page} room={current.short} onHome={() => navigate("home")}>
         {page === "home" && <HomePage navigate={navigate} scores={liveScores} dynasty={dynasty} nba={nba} sport={sport} setSport={setSport} />}
+        {INFO_PAGES.some((p) => p.key === page) && <InfoPage page={page} navigate={navigate} />}
         {page === "weekly" && <WeeklyScores players={liveScores.players} data={liveScores} />}
         {page === "waivers" && <WaiverTargets scores={liveScores} sleeperPlayers={sleeperPlayers} values={dynasty.rows} />}
         {page === "injuries" && <InjuredReserve players={currentPlayers} reportPlayers={liveScores.players} data={liveScores} sleeperPlayers={sleeperPlayers} />}

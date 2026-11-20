@@ -360,3 +360,27 @@ test("nba-market tradeDatabase: picks become the draft after the trade's season,
   assert.deepEqual(db.names, { 1: "A", 2: "B", 3: "Unknown player" });
   assert.equal(nba.nextDraftYear(Date.UTC(2027, 5, 1)), 2027); // before the June draft
 });
+
+test("check-data: stale, too small, off-season and unreadable files", () => {
+  const { runChecks } = require("../scripts/check-data");
+  const checks = [
+    { file: "fresh.js", maxDays: 3, count: (d) => d.rows.length, min: 2 },
+    { file: "stale.js", maxDays: 3, count: (d) => d.rows.length, min: 2 },
+    { file: "small.js", maxDays: 3, count: (d) => d.rows.length, min: 2 },
+    { file: "summer.js", maxDays: 3, months: [10, 11], count: () => 0, min: 1 },
+    { file: "broken.js", maxDays: 3, count: () => 0, min: 0 },
+  ];
+  const files = {
+    "fresh.js": { updatedOn: "2026-11-19", rows: [1, 2] },
+    "stale.js": { updatedOn: "2026-11-10", rows: [1, 2] },
+    "small.js": { updatedOn: "2026-11-20", rows: [1] },
+  };
+  const read = (f) => { if (!files[f]) throw new Error("missing"); return files[f]; };
+  const byFile = Object.fromEntries(runChecks("2026-11-20", checks, read).map((r) => [r.file, r]));
+  assert.equal(byFile["fresh.js"].ok, true);
+  assert.match(byFile["stale.js"].message, /10 days ago/);
+  assert.equal(byFile["stale.js"].ok, false);
+  assert.match(byFile["small.js"].message, /only 1 entries/);
+  assert.equal(byFile["broken.js"].ok, false);
+  assert.equal(runChecks("2026-07-01", checks, read).find((r) => r.file === "summer.js").skipped, true);
+});

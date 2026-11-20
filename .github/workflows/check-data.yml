@@ -1,0 +1,23 @@
+# Fails (and GitHub emails you) when a data/ file is stale or suspiciously
+# small, meaning one of the refresh Actions has quietly stopped working.
+# scripts/check-data.js has the limits for each file.
+name: Check data
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # after the morning refreshes (10:00-12:30 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check data files
+        run: node scripts/check-data.js

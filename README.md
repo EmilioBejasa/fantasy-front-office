@@ -65,6 +65,20 @@ works, e.g. `python -m http.server` from this directory, then open
 Scores, the hand-picked Waiver Wire list, Injured Reserve) works fine from a
 plain double-clicked file too.
 
+**Data health check:** `.github/workflows/check-data.yml` runs
+`scripts/check-data.js` every day at 14:00 UTC, after the morning refreshes.
+It fails (and GitHub emails you) if any `data/` file is older than its limit
+or holds suspiciously few players or trades, so a refresh Action that quietly
+breaks doesn't leave the site stale. Season-only files (NFL scores, NBA
+stats and waivers) are skipped in their off-season. Run it locally with
+`node scripts/check-data.js`.
+
+**About, Privacy and Terms** (`#/about`, `#/privacy`, `#/terms`, `InfoPage`)
+are linked from the footer, with a Feedback link to GitHub Issues. Privacy
+lists what the site keeps in the browser and has a button that clears every
+`ff-valuediff:` key. Update its text before adding analytics, a backend or
+other league platforms.
+
 ## Site layout
 
 The page is laid out like a website, themed as an **executive front office**

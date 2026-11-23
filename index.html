@@ -193,14 +193,14 @@
   .btn-primary { background: linear-gradient(180deg, var(--sport-btn-a), var(--sport-btn-b)); color: #ffffff;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px -8px color-mix(in srgb, var(--sport-btn-b) 80%, transparent);
     transition: transform .15s, box-shadow .15s, filter .15s; }
-  .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.06);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 22px -8px color-mix(in srgb, var(--sport-btn-b) 90%, transparent); }
+  .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.14) saturate(1.05);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 14px 26px -10px color-mix(in srgb, var(--sport-btn-b) 95%, transparent); }
   .btn-primary:active { transform: translateY(0) scale(.97); }
   .btn-secondary { border: 1px solid var(--border); color: var(--text-primary); background: var(--surface-1);
-    transition: background-color .15s, border-color .15s, transform .15s; }
-  .btn-secondary:hover { background: var(--surface-2); border-color: var(--sport); transform: translateY(-1px); }
+    transition: background-color .15s, border-color .15s, transform .15s, box-shadow .15s, color .15s; }
+  .btn-secondary:hover { background: color-mix(in srgb, var(--sport) 14%, var(--surface-1)); border-color: var(--sport);
+    transform: translateY(-2px); box-shadow: 0 10px 20px -12px color-mix(in srgb, var(--sport) 80%, transparent); }
   .btn-secondary:active { transform: translateY(0) scale(.97); }
-  .hero-glow { background: radial-gradient(55% 120% at 50% 0%, color-mix(in srgb, var(--sport) 20%, transparent), transparent 70%); }
   .text-gradient { background: linear-gradient(90deg, var(--brass-grad-a), var(--brass-grad-b) 55%, var(--brass-grad-a));
     -webkit-background-clip: text; background-clip: text; color: transparent; }
 
@@ -213,8 +213,10 @@
   .pill { --pill-accent: var(--page-accent, var(--sport)); border: 1px solid var(--border); background: var(--surface-1);
     color: var(--text-secondary); cursor: pointer; user-select: none;
     transition: background-color .15s, border-color .15s, color .15s, transform .1s, box-shadow .15s; }
-  .pill:hover { border-color: var(--pill-accent); color: var(--text-primary);
-    background: color-mix(in srgb, var(--pill-accent) 12%, var(--surface-1)); }
+  .pill:hover { border-color: var(--pill-accent); color: var(--text-primary); transform: translateY(-1px);
+    background: color-mix(in srgb, var(--pill-accent) 20%, var(--surface-1));
+    box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--pill-accent) 80%, transparent); }
+  .pill[aria-pressed="true"]:hover { filter: brightness(1.1); }
   .pill:active { transform: scale(.94); }
   .pill[aria-pressed="true"] { background: var(--pill-accent); border-color: var(--pill-accent); color: #ffffff; font-weight: 600;
     box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--pill-accent) 70%, transparent); }
@@ -281,8 +283,11 @@
   .fs-add-plus { width: 30px; height: 30px; flex-shrink: 0; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
     font-size: 18px; font-weight: 700; color: var(--side); background: color-mix(in srgb, var(--side) 14%, transparent); }
   .fs-swap { width: 40px; height: 40px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-size: 18px;
-    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); transition: color .15s, border-color .15s; }
-  .fs-swap:hover { color: var(--sport); border-color: var(--sport); }
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    transition: color .15s, border-color .15s, background-color .15s, transform .25s; }
+  .fs-swap:hover { color: var(--sport); border-color: var(--sport); background: color-mix(in srgb, var(--sport) 14%, var(--surface-1));
+    transform: rotate(180deg); }
+  .fs-swap:active { transform: rotate(180deg) scale(.9); }
   .fs-score { border-radius: 14px; border: 1px solid var(--border); background: var(--surface-1); padding: 14px 16px;
     display: flex; flex-direction: column; gap: 10px; }
   .fs-score-num { font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -327,7 +332,7 @@
   .seg { position: relative; z-index: 1; border: 0; background: transparent; color: var(--text-secondary); border-radius: 8px;
     padding: 4px 11px; font-size: 12px; font-weight: 500; line-height: 1.45; white-space: nowrap; cursor: pointer;
     transition: color .15s, background-color .15s, transform .1s; }
-  .seg:hover:not([aria-pressed="true"]) { color: var(--text-primary); background: color-mix(in srgb, var(--pill-accent) 14%, transparent); }
+  .seg:hover:not([aria-pressed="true"]) { color: var(--text-primary); background: color-mix(in srgb, var(--pill-accent) 24%, transparent); }
   .seg[aria-pressed="true"] { color: #ffffff; font-weight: 600; }
   .seg:active { transform: scale(.95); }
   .seg:focus-visible { outline: 2px solid var(--sport); outline-offset: 1px; }
@@ -403,7 +408,8 @@
     .search-panel { animation: none; }
     .seg-indicator, .seg, .nav-trigger svg, .nav-menu > div { transition: none; animation: none; }
     .card-link, .card-arrow, .nav-link, .pill, .btn-primary, .btn-secondary { transition: none; }
-    .card-link:hover, .pill:active, .btn-primary:hover, .btn-secondary:hover { transform: none; }
+    .card-link:hover, .pill:active, .pill:hover, .btn-primary:hover, .btn-secondary:hover, .fs-swap:hover, .fs-swap:active { transform: none; }
+    .fs-swap { transition: none; }
   }
 </style>
 </head>
@@ -11751,7 +11757,7 @@ function HomePage({ navigate, scores, dynasty, nba, sport, setSport }) {
   const sportInfo = SPORTS.find((x) => x.key === sport);
   return (
     <div className="flex flex-col gap-10">
-      <section className="hero-glow -mx-4 px-4 pt-8 pb-2 sm:pt-12 text-center flex flex-col items-center gap-4">
+      <section className="-mx-4 px-4 pt-8 pb-2 sm:pt-12 text-center flex flex-col items-center gap-4">
         <span className="text-xs font-semibold uppercase tracking-wider rounded-md border px-3 py-1"
           style={{ borderColor: "var(--sport)", color: "var(--sport)", background: "var(--surface-1)" }}>
           {sport === "nba"

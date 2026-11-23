@@ -384,3 +384,18 @@ test("check-data: stale, too small, off-season and unreadable files", () => {
   assert.equal(byFile["broken.js"].ok, false);
   assert.equal(runChecks("2026-07-01", checks, read).find((r) => r.file === "summer.js").skipped, true);
 });
+
+test("check-data: the hand-kept lists' dates in index.html", () => {
+  const { CHECKS, runChecks, readDataFile } = require("../scripts/check-data");
+  const lists = CHECKS.filter((c) => c.file.startsWith("index.html#"));
+  assert.deepEqual(lists.map((c) => c.file.split("#")[1]), ["WAIVER_TARGETS_UPDATED_ON", "INJURED_RESERVE_UPDATED_ON", "CLASS_2027_UPDATED_ON"]);
+  // Each date really is in index.html.
+  for (const c of lists) assert.match(readDataFile(c.file).updatedOn, /^\d{4}-\d{2}-\d{2}$/);
+  const read = () => ({ updatedOn: "2026-11-23" });
+  const at = (today) => Object.fromEntries(runChecks(today, lists, read).map((r) => [r.file.split("#")[1], r]));
+  assert.equal(at("2026-12-01").WAIVER_TARGETS_UPDATED_ON.ok, true); // 8 days
+  assert.equal(at("2026-12-02").WAIVER_TARGETS_UPDATED_ON.ok, false); // 9 days
+  assert.equal(at("2026-12-02").CLASS_2027_UPDATED_ON.ok, true);
+  assert.equal(at("2027-03-01").INJURED_RESERVE_UPDATED_ON.skipped, true); // off-season
+  assert.equal(at("2027-03-01").CLASS_2027_UPDATED_ON.ok, false); // checked all year
+});

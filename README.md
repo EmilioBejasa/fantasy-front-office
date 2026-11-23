@@ -70,7 +70,10 @@ plain double-clicked file too.
 It fails (and GitHub emails you) if any `data/` file is older than its limit
 or holds suspiciously few players or trades, so a refresh Action that quietly
 breaks doesn't leave the site stale. Season-only files (NFL scores, NBA
-stats and waivers) are skipped in their off-season. Run it locally with
+stats and waivers) are skipped in their off-season. It also checks the
+hand-kept lists in `index.html` by their `*_UPDATED_ON` dates, since nothing
+refreshes those on their own: `WAIVER_TARGETS` and `INJURED_RESERVE` fail
+after 8 days (September-December only), `CLASS_2027` after 45. Run it locally with
 `node scripts/check-data.js`.
 
 **About, Privacy and Terms** (`#/about`, `#/privacy`, `#/terms`, `InfoPage`)

@@ -12,14 +12,21 @@
 // months (1-12), so the off-season doesn't fail them: NFL games run
 // September-February, NBA October-June. The trade markets and values run all
 // year, since dynasty trading never stops.
+//
+// It also checks the hand-kept lists in index.html, through their
+// `*_UPDATED_ON` dates (a `file` of "index.html#NAME"): nothing refreshes those
+// on its own, so this is the reminder to rebuild them. The waiver and IR
+// lists only matter during the fantasy season (September-December).
 
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const DATA = path.join(__dirname, "..", "data");
+const ROOT = path.join(__dirname, "..");
+const DATA = path.join(ROOT, "data");
 const NFL_SEASON = [9, 10, 11, 12, 1, 2];
 const NBA_SEASON = [10, 11, 12, 1, 2, 3, 4, 5, 6];
+const FANTASY_SEASON = [9, 10, 11, 12];
 
 const size = (o) => (Array.isArray(o) ? o.length : o && typeof o === "object" ? Object.keys(o).length : 0);
 const lastDate = (d) => d.dates?.[d.dates.length - 1];
@@ -39,10 +46,21 @@ const CHECKS = [
   { file: "nba-market.js", maxDays: 3, count: (d) => size(d.formats?.dynasty), min: 150 },
   { file: "nba-market-history.js", maxDays: 9, date: lastDate, count: (d) => size(d.dynasty), min: 150 },
   { file: "nba-trades.js", maxDays: 3, count: (d) => size(d.trades), min: 500 },
+  // Hand-kept lists: a date only, so no minimum count.
+  { file: "index.html#WAIVER_TARGETS_UPDATED_ON", maxDays: 8, months: FANTASY_SEASON, count: () => 1, min: 0 },
+  { file: "index.html#INJURED_RESERVE_UPDATED_ON", maxDays: 8, months: FANTASY_SEASON, count: () => 1, min: 0 },
+  { file: "index.html#CLASS_2027_UPDATED_ON", maxDays: 45, count: () => 1, min: 0 },
 ];
 
-// The object a data file assigns to window.
+// The object a data file assigns to window, or for "index.html#NAME",
+// { updatedOn } from that `const NAME = "YYYY-MM-DD"` in index.html.
 function readDataFile(file) {
+  const [page, name] = file.split("#");
+  if (name) {
+    const m = fs.readFileSync(path.join(ROOT, page), "utf8").match(new RegExp(`const ${name} = "(\\d{4}-\\d{2}-\\d{2})"`));
+    if (!m) throw new Error(`no ${name} date`);
+    return { updatedOn: m[1] };
+  }
   const window = {};
   vm.runInNewContext(fs.readFileSync(path.join(DATA, file), "utf8"), { window });
   const values = Object.values(window);
@@ -65,7 +83,7 @@ function runChecks(today, checks = CHECKS, read = readDataFile) {
       else if (daysBetween(date, today) > c.maxDays) problems.push(`last updated ${date}, ${daysBetween(date, today)} days ago (limit ${c.maxDays})`);
       const n = c.count(d);
       if (n < c.min) problems.push(`only ${n} entries (expected at least ${c.min})`);
-      return { file: c.file, ok: problems.length === 0, message: problems.length ? problems.join("; ") : `${date}, ${n} entries` };
+      return { file: c.file, ok: problems.length === 0, message: problems.length ? problems.join("; ") : c.file.includes("#") ? date : `${date}, ${n} entries` };
     } catch (e) {
       return { file: c.file, ok: false, message: `couldn't read it: ${e.message}` };
     }
@@ -79,7 +97,7 @@ if (require.main === module) {
   for (const r of results) console.log(`${r.ok ? (r.skipped ? "–" : "✓") : "✗"} ${r.file}: ${r.message}`);
   const failed = results.filter((r) => !r.ok);
   if (failed.length) {
-    console.error(`\n${failed.length} data file(s) look stale or broken. Check that file's refresh Action.`);
+    console.error(`\n${failed.length} data file(s) look stale or broken. Check that file's refresh Action, or for index.html, rebuild that hand-kept list.`);
     process.exit(1);
   }
 }

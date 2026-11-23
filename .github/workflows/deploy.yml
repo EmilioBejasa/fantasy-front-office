@@ -22,14 +22,15 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Build and deploy are separate jobs. In a single job, deploy-pages sometimes
+# asked for the artifact a fraction of a second after the upload finished, before
+# GitHub had registered it ("No artifacts named github-pages were found"). The
+# job boundary gives it time to appear.
 jobs:
-  deploy:
+  build:
     # After a refresh job, only if it succeeded (it may have pushed new data).
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       # Always the latest master, including data a refresh job just pushed.
       - uses: actions/checkout@v4
@@ -58,5 +59,12 @@ jobs:
         with:
           path: dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
